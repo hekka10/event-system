@@ -1,0 +1,11 @@
+{
+    "name": "event-system-root",
+    "private": true,
+    "scripts": {
+        "dev:frontend": "npm run dev --prefix frontend",
+        "dev:backend": "./.venv/bin/python backend/manage.py runserver",
+        "dev": "npm run dev:frontend & npm run dev:backend",
+        "install:frontend": "npm install --prefix frontend",
+        "install:all": "npm install --prefix frontend && pip install -r backend/requirements.txt"
+    }
+}

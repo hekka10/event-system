@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api/auth';
+const API_URL = `${import.meta.env.VITE_API_URL}/auth`;
 
 const register = async (userData) => {
     const response = await fetch(`${API_URL}/register/`, {
@@ -27,12 +27,28 @@ const login = async (userData) => {
     if (!response.ok) {
         throw new Error(data.message || 'Login failed');
     }
+
+    if (data.access) {
+        localStorage.setItem('user', JSON.stringify(data));
+    }
+
     return data;
+};
+
+const logout = () => {
+    localStorage.removeItem('user');
+};
+
+const getCurrentUser = () => {
+    return JSON.parse(localStorage.getItem('user'));
 };
 
 const authService = {
     register,
     login,
+    logout,
+    getCurrentUser,
 };
 
 export default authService;
+

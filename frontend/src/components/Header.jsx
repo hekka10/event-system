@@ -1,85 +1,88 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom";
+import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket } from "lucide-react";
+import authService from "../services/authService";
 
 function Header() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user'));
+  const user = authService.getCurrentUser();
+  const isAdmin = user && (user.is_staff || user.is_superuser);
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
+    authService.logout();
     navigate('/login');
   };
 
   return (
-    <header style={styles.header}>
-      <h2 style={styles.logo}>SmartEvents</h2>
-      <nav style={styles.nav}>
-        <Link to="/" style={styles.link}>Home</Link>
-        <Link to="/events" style={styles.link}>Events</Link>
-        {user ? (
-          <div style={styles.authGroup}>
-            <span>{user.username}</span>
-            <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-50 backdrop-blur-md bg-white/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="bg-indigo-600 p-1.5 rounded-lg">
+                <Calendar className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
+                SmartEvents
+              </span>
+            </Link>
+
+            <nav className="hidden md:flex items-center gap-6">
+              <Link to="/" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Home</Link>
+              <Link to="/events" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Events</Link>
+              {user && (
+                <>
+                  <Link to="/my-bookings" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                    <Ticket className="w-4 h-4" />
+                    My Bookings
+                  </Link>
+                  {isAdmin && (
+                    <Link to="/admin-dashboard" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                      <LayoutDashboard className="w-4 h-4" />
+                      Dashboard
+                    </Link>
+                  )}
+                  <Link to="/create-event" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                    <PlusSquare className="w-4 h-4" />
+                    Create Event
+                  </Link>
+                </>
+              )}
+            </nav>
           </div>
-        ) : (
-          <div style={styles.authGroup}>
-            <Link to="/login" style={styles.link}>Login</Link>
-            <Link to="/signup" style={styles.signupBtn}>Sign Up</Link>
+
+          <div className="flex items-center gap-4">
+            {user ? (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
+                  <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">{user.username || user.email.split('@')[0]}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-gray-400 hover:text-red-500 transition-colors hover:bg-red-50 rounded-full"
+                  title="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-indigo-600 px-4 py-2 transition-colors">
+                  Login
+                </Link>
+                <Link to="/signup" className="text-sm font-medium bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-indigo-100">
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
-        )}
-      </nav>
+        </div>
+      </div>
     </header>
-  )
+  );
 }
 
-const styles = {
-  header: {
-    padding: "16px 40px",
-    borderBottom: "1px solid #eee",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    position: "sticky",
-    top: 0,
-    zIndex: 1000
-  },
-  logo: {
-    margin: 0,
-    color: "#2563eb",
-    fontWeight: "bold"
-  },
-  nav: {
-    display: "flex",
-    alignItems: "center",
-    gap: "20px"
-  },
-  link: {
-    textDecoration: "none",
-    color: "#4b5563",
-    fontWeight: "500"
-  },
-  authGroup: {
-    display: "flex",
-    alignItems: "center",
-    gap: "15px"
-  },
-  signupBtn: {
-    textDecoration: "none",
-    backgroundColor: "#2563eb",
-    color: "#fff",
-    padding: "8px 20px",
-    borderRadius: "8px",
-    fontWeight: "600"
-  },
-  logoutBtn: {
-    backgroundColor: "#fef2f2",
-    color: "#dc2626",
-    border: "1px solid #fee2e2",
-    padding: "8px 16px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600"
-  }
-}
+export default Header;
 
-export default Header

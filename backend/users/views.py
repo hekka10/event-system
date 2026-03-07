@@ -28,6 +28,7 @@ class RegisterView(generics.CreateAPIView):
 # But we might want to customize the response to match the existing Express response format.
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework.permissions import IsAuthenticated
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -35,8 +36,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['_id'] = self.user.id
         data['username'] = self.user.username
         data['email'] = self.user.email
-        data['token'] = data.pop('access')
+        data['is_staff'] = self.user.is_staff
+        data['is_superuser'] = self.user.is_superuser
         return data
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+class UserProfileView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        return self.request.user
+

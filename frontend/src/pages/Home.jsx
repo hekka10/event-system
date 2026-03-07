@@ -1,268 +1,151 @@
-import React from 'react';
-import { Calendar, Users, CreditCard, Bell, Search, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import eventService from '../services/eventService';
+import EventCard from '../components/EventCard';
+import { Sparkles, Calendar, Users, ShieldCheck, ArrowRight, Zap, Loader2 } from 'lucide-react';
 
-export default function EventFlowHomepage() {
-  const events = [
-    {
-      title: "Tech Conference 2024",
-      date: "October 15, 2024",
-      location: "San Francisco, CA",
-      price: "Free",
-      category: "Conference",
-      image: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Annual Student Art Exhibition",
-      date: "November 20, 2024",
-      location: "New York University",
-      price: "$25.00",
-      category: "Exhibition",
-      image: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Music Festival Live",
-      date: "September 18, 2024",
-      location: "Central Park",
-      price: "$45.00",
-      category: "Music",
-      image: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Career Opportunities Fair",
-      date: "October 10, 2024",
-      location: "Boston Convention Center",
-      price: "Free",
-      category: "Career Fair",
-      image: "https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Annual Sports Day",
-      date: "November 5, 2024",
-      location: "Stanford Stadium",
-      price: "Free",
-      category: "Sports",
-      image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Alumni Networking Mixer",
-      date: "December 12, 2024",
-      location: "Chicago Hilton",
-      price: "$30.00",
-      category: "Networking",
-      image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Debate Club Showcase",
-      date: "October 25, 2024",
-      location: "Harvard Law School",
-      price: "Free",
-      category: "Academic",
-      image: "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Advanced Coding Workshop",
-      date: "November 8, 2024",
-      location: "MIT Campus",
-      price: "$50.00",
-      category: "Workshop",
-      image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=250&fit=crop"
-    },
-    {
-      title: "Literary Reading Series",
-      date: "December 3, 2024",
-      location: "Columbia University",
-      price: "Free",
-      category: "Arts & Culture",
-      image: "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=400&h=250&fit=crop"
-    }
-  ];
+function Home() {
+  const [featuredEvents, setFeaturedEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const features = [
-    {
-      icon: <Calendar className="w-8 h-8" />,
-      title: "Browse Events",
-      description: "Explore a wide variety of campus events tailored to your interests."
-    },
-    {
-      icon: <Users className="w-8 h-8" />,
-      title: "Verify Student ID",
-      description: "Quick and easy student verification for exclusive campus events."
-    },
-    {
-      icon: <CreditCard className="w-8 h-8" />,
-      title: "Pay Securely",
-      description: "Safe and secure payment processing for event tickets."
-    },
-    {
-      icon: <Bell className="w-8 h-8" />,
-      title: "Receive QR Ticket",
-      description: "Get your QR code ticket instantly delivered to your email."
-    }
-  ];
-
-  const benefits = [
-    {
-      title: "Student Verification & Integration",
-      description: "Easily authenticate student status and integrate with school systems for seamless event access."
-    },
-    {
-      title: "Secure Online Payments",
-      description: "Pay for events with confidence using our encrypted payment gateway."
-    },
-    {
-      title: "Flexible & Secure Check-In",
-      description: "Use QR codes for fast, contactless check-in at any campus event."
-    },
-    {
-      title: "QR Ticket & Email Confirmation",
-      description: "Receive instant QR tickets via email for easy access to all your events."
-    }
-  ];
+  useEffect(() => {
+    const fetchLatestEvents = async () => {
+      try {
+        const data = await eventService.getAllEvents();
+        setFeaturedEvents(data.slice(0, 3));
+      } catch (err) {
+        console.error('Error fetching latest events:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLatestEvents();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-
-
+    <div className="bg-white">
       {/* Hero Section */}
-      <section className="bg-white py-20">
+      <section className="relative overflow-hidden bg-gradient-to-b from-indigo-50/50 to-white pt-20 pb-20 md:pt-32 md:pb-32">
+        {/* Animated Blobs */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full pointer-events-none">
+          <div className="absolute top-[10%] left-[10%] w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+          <div className="absolute top-[10%] right-[10%] w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse duration-3000"></div>
+          <div className="absolute bottom-[20%] left-[20%] w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse duration-5000"></div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-sm font-bold mb-8 transition-all">
+              <Zap className="w-4 h-4 fill-current" />
+              Next Generation Event Management
+            </div>
+            <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 tracking-tight leading-[1.1] mb-8">
+              Make Every Event <br />
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600">
+                Memorable & Seamless
+              </span>
+            </h1>
+            <p className="max-w-2xl mx-auto text-xl text-gray-500 mb-10 leading-relaxed">
+              From ticketing to check-ins, managed entirely with the Smart Event system. Focus on the experience, let us handle the logistics.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link to="/events" className="w-full sm:w-auto px-8 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 flex items-center justify-center gap-2">
+                Explore Events
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+              <Link to="/signup" className="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 font-bold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-all">
+                Get Started for Free
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div className="p-8 rounded-3xl bg-gray-50 hover:bg-white border border-transparent hover:border-indigo-100 transition-all group">
+              <div className="bg-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <Calendar className="w-7 h-7 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Easy Scheduling</h3>
+              <p className="text-gray-500 leading-relaxed">Create and manage multiple events with our intuitive dashboard in just a few clicks.</p>
+            </div>
+            <div className="p-8 rounded-3xl bg-gray-50 hover:bg-white border border-transparent hover:border-indigo-100 transition-all group">
+              <div className="bg-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <Users className="w-7 h-7 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Smart Check-ins</h3>
+              <p className="text-gray-500 leading-relaxed">Fast check-ins with QR ticket scanning and real-time attendee management.</p>
+            </div>
+            <div className="p-8 rounded-3xl bg-gray-50 hover:bg-white border border-transparent hover:border-indigo-100 transition-all group">
+              <div className="bg-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm mb-6 group-hover:scale-110 transition-transform">
+                <ShieldCheck className="w-7 h-7 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Verified Bookings</h3>
+              <p className="text-gray-500 leading-relaxed">Secure payment processing and automatic student verification for discounts.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Latest Events Section */}
+      <section className="py-24 bg-gray-50/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-12">
             <div>
-              <h1 className="text-5xl font-bold text-gray-900 mb-6">
-                Discover and Book Campus Events Easily
-              </h1>
-              <p className="text-lg text-gray-600 mb-8">
-                Explore campus events, exclusive workshops, and activities designed for students. Book and get instant tickets for all university events.
-              </p>
-              <div className="flex gap-4">
-                <button className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium">
-                  Get Started
-                </button>
-                <button className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg hover:bg-gray-50 font-medium">
-                  Learn More
-                </button>
-              </div>
+              <h2 className="text-3xl font-extrabold text-gray-900">Upcoming Events</h2>
+              <p className="text-gray-500 font-medium mt-1">Don't miss out on these amazing experiences</p>
             </div>
-            <div className="relative">
-              <img
-                src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=400&fit=crop"
-                alt="Campus Events"
-                className="rounded-2xl shadow-2xl"
-              />
-            </div>
+            <Link to="/events" className="hidden sm:flex items-center gap-2 text-indigo-600 font-bold hover:text-indigo-700">
+              See All
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-        </div>
-      </section>
 
-      {/* Search Bar */}
-      <section className="bg-white py-8 border-t border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-4 items-center">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search events..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-              />
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
             </div>
-            <div className="flex gap-4">
-              <select className="px-4 py-2 border border-gray-300 rounded-lg">
-                <option>Date</option>
-              </select>
-              <select className="px-4 py-2 border border-gray-300 rounded-lg">
-                <option>Entry</option>
-              </select>
-              <select className="px-4 py-2 border border-gray-300 rounded-lg">
-                <option>Keyword</option>
-              </select>
-              <select className="px-4 py-2 border border-gray-300 rounded-lg">
-                <option>Date When</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Events Grid */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-10 text-center">
-            Upcoming Campus Events
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {events.map((event, index) => (
-              <div key={index} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                <img
-                  src={event.image}
-                  alt={event.title}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{event.title}</h3>
-                  <div className="space-y-2 mb-4">
-                    <p className="text-sm text-gray-600 flex items-center">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      {event.date}
-                    </p>
-                    <p className="text-sm text-gray-600">{event.location}</p>
-                  </div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-lg font-bold text-gray-900">{event.price}</span>
-                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                      {event.category}
-                    </span>
-                  </div>
-                  <button className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium">
-                    Register
-                  </button>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {featuredEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+              {featuredEvents.length === 0 && (
+                <div className="col-span-full text-center py-10 text-gray-500 font-medium">
+                  No upcoming events at the moment.
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+          )}
+
+          <div className="mt-12 text-center sm:hidden">
+            <Link to="/events" className="inline-flex items-center gap-2 text-indigo-600 font-bold border-2 border-indigo-600 px-6 py-3 rounded-xl hover:bg-indigo-50 transition-all">
+              View More Events
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Why Use Platform */}
-      <section className="bg-white py-16">
+      {/* CTA Section */}
+      <section className="py-24 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-12 text-center">
-            Why Use This Platform?
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {benefits.map((benefit, index) => (
-              <div key={index} className="text-center">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">{benefit.title}</h3>
-                <p className="text-gray-600 text-sm">{benefit.description}</p>
-              </div>
-            ))}
+          <div className="bg-indigo-600 rounded-[3rem] p-12 md:p-24 relative overflow-hidden shadow-2xl shadow-indigo-200">
+            <div className="absolute top-0 right-0 -translate-y-12 translate-x-12 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="relative z-10 max-w-2xl">
+              <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-8">Ready to host your own event?</h2>
+              <p className="text-indigo-100 text-xl mb-10 leading-relaxed">Join thousands of organizers using SmartEvents to simplify their planning and grow their audience.</p>
+              <Link to="/signup" className="inline-flex bg-white text-indigo-600 font-bold px-10 py-5 rounded-2xl hover:bg-gray-50 transition-all shadow-xl shadow-indigo-900/10 active:scale-[0.98]">
+                Start Hosting Now
+              </Link>
+            </div>
           </div>
         </div>
       </section>
-
-      {/* How It Works */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-12 text-center">
-            How It Works
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <div key={index} className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 text-blue-600 rounded-full mb-4">
-                  {feature.icon}
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600 text-sm">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-
     </div>
   );
 }
+
+export default Home;

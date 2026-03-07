@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import authService from '../services/authService';
+import { Mail, Lock, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 
 function Login() {
     const [formData, setFormData] = useState({
         email: '',
         password: '',
     });
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
@@ -16,58 +18,82 @@ function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLoading(true);
         setError('');
         try {
-            const data = await authService.login(formData);
-            localStorage.setItem('user', JSON.stringify(data));
+            await authService.login(formData);
             navigate('/');
         } catch (err) {
-            setError(err.message);
+            setError(err.message || 'Login failed. Please check your credentials.');
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl">
-                <div>
-                    <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">Log in to your account</h2>
-                </div>
-                <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    {error && <div className="text-red-500 text-center">{error}</div>}
-                    <div className="rounded-md shadow-sm space-y-4">
-                        <input
-                            name="email"
-                            type="email"
-                            required
-                            className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-600 focus:border-blue-600 focus:z-10 sm:text-sm"
-                            placeholder="Email address"
-                            value={formData.email}
-                            onChange={handleChange}
-                        />
-                        <input
-                            name="password"
-                            type="password"
-                            required
-                            className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-600 focus:border-blue-600 focus:z-10 sm:text-sm"
-                            placeholder="Password"
-                            value={formData.password}
-                            onChange={handleChange}
-                        />
+        <div className="min-h-[calc(100-64px)] flex items-center justify-center bg-gray-50/50 py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-md w-full">
+                <div className="bg-white p-10 rounded-[2.5rem] shadow-xl shadow-indigo-100/50 border border-gray-100">
+                    <div className="text-center mb-10">
+                        <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200">
+                            <ShieldCheck className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-3xl font-extrabold text-gray-900">Welcome Back</h2>
+                        <p className="mt-2 text-gray-500 font-medium">Log in to manage your events</p>
                     </div>
 
-                    <div>
+                    <form className="space-y-6" onSubmit={handleSubmit}>
+                        {error && (
+                            <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-sm italic text-center">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div className="relative group">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                                <input
+                                    name="email"
+                                    type="email"
+                                    required
+                                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none text-gray-900 transition-all font-medium"
+                                    placeholder="Email address"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                            <div className="relative group">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                                <input
+                                    name="password"
+                                    type="password"
+                                    required
+                                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none text-gray-900 transition-all font-medium"
+                                    placeholder="Password"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                />
+                            </div>
+                        </div>
+
                         <button
                             type="submit"
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 transition-colors"
+                            disabled={loading}
+                            className="w-full flex justify-center items-center gap-2 py-4 px-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98] disabled:opacity-50"
                         >
-                            Log in
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log in'}
+                            {!loading && <ArrowRight className="w-5 h-5" />}
                         </button>
+                    </form>
+
+                    <div className="mt-10 text-center">
+                        <p className="text-gray-500 font-medium">
+                            Don't have an account?{' '}
+                            <Link to="/signup" className="text-indigo-600 font-bold hover:text-indigo-700 underline underline-offset-4">
+                                Sign up
+                            </Link>
+                        </p>
                     </div>
-                </form>
-                <div className="text-center">
-                    <Link to="/signup" className="font-medium text-blue-600 hover:text-blue-500">
-                        Don't have an account? Sign up
-                    </Link>
                 </div>
             </div>
         </div>
