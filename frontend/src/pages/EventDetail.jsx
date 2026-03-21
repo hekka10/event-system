@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import eventService from '../services/eventService';
 import bookingService from '../services/bookingService';
-import { Calendar, MapPin, Tag, Users, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
+import { Calendar, MapPin, Tag, Users, ArrowLeft, Loader2, CheckCircle2, CarFront, Navigation } from 'lucide-react';
 import authService from '../services/authService';
 
 function EventDetail() {
@@ -142,6 +142,46 @@ function EventDetail() {
                                     </div>
                                 </div>
                             </div>
+
+                            {(event.parking_info || event.parking_map_url || (event.latitude && event.longitude)) && (
+                                <div className="mt-10 pt-10 border-t border-gray-100">
+                                    <div className="flex items-start gap-4 mb-5">
+                                        <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                                            <CarFront className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-900">Parking & Navigation</h4>
+                                            <p className="text-gray-600 text-sm mt-1">
+                                                {event.parking_info || 'Use the venue map below for easier arrival and parking access.'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {event.parking_map_url && (
+                                        <a
+                                            href={event.parking_map_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:underline"
+                                        >
+                                            <Navigation className="w-4 h-4" />
+                                            Open parking map
+                                        </a>
+                                    )}
+
+                                    {!event.parking_map_url && event.latitude && event.longitude && (
+                                        <a
+                                            href={`https://www.google.com/maps?q=${event.latitude},${event.longitude}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:underline"
+                                        >
+                                            <Navigation className="w-4 h-4" />
+                                            Open coordinates in map
+                                        </a>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -158,7 +198,13 @@ function EventDetail() {
                             <div className="space-y-4 mb-8">
                                 <div className="flex items-center text-sm text-gray-600 gap-2">
                                     <Users className="w-4 h-4 text-indigo-500" />
-                                    <span>Limited sets available ({event.capacity} total)</span>
+                                    <span>
+                                        {event.remaining_capacity} left out of {event.capacity} total
+                                    </span>
+                                </div>
+                                <div className="flex items-center text-sm text-gray-600 gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-indigo-500" />
+                                    <span>{event.confirmed_booking_count} confirmed bookings</span>
                                 </div>
                                 <div className="flex items-center text-sm text-gray-600 gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-indigo-500" />
@@ -169,18 +215,18 @@ function EventDetail() {
                             {user ? (
                                 <button
                                     onClick={handleBooking}
-                                    disabled={bookingLoading}
+                                    disabled={bookingLoading || event.is_sold_out}
                                     className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bookingLoading && <Loader2 className="w-5 h-5 animate-spin" />}
-                                    {bookingLoading ? 'Processing...' : 'Get Tickets'}
+                                    {bookingLoading ? 'Processing...' : event.is_sold_out ? 'Sold Out' : 'Get Tickets'}
                                 </button>
                             ) : (
                                 <Link
                                     to="/login"
-                                    className="block w-full text-center bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-gray-800 transition-all shadow-lg active:scale-[0.98]"
+                                    className={`block w-full text-center bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-gray-800 transition-all shadow-lg active:scale-[0.98] ${event.is_sold_out ? 'pointer-events-none opacity-50' : ''}`}
                                 >
-                                    Login to Book
+                                    {event.is_sold_out ? 'Sold Out' : 'Login to Book'}
                                 </Link>
                             )}
 

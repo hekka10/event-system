@@ -1,29 +1,141 @@
-from django.db import models
-from django.conf import settings
-import uuid
-import qrcode
 from io import BytesIO
-from django.core.files import File
-from PIL import Image
+import uuid
+
+import qrcode
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.db import models
+from django.utils import timezone
+
 
 class Booking(models.Model):
+    STATUS_PENDING = 'PENDING'
+    STATUS_CONFIRMED = 'CONFIRMED'
+    STATUS_CANCELLED = 'CANCELLED'
+    STATUS_FAILED = 'FAILED'
     STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('CONFIRMED', 'Confirmed'),
-        ('CANCELLED', 'Cancelled'),
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_CONFIRMED, 'Confirmed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    SOURCE_ONLINE = 'ONLINE'
+    SOURCE_OFFLINE = 'OFFLINE'
+    SOURCE_CHOICES = [
+        (SOURCE_ONLINE, 'Online'),
+        (SOURCE_OFFLINE, 'Offline'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
-    event = models.ForeignKey('events.Event', on_delete=models.CASCADE, related_name='bookings')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+    )
+    event = models.ForeignKey(
+        'events.Event',
+        on_delete=models.CASCADE,
+        related_name='bookings',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    booking_source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_ONLINE,
+    )
     is_student = models.BooleanField(default=False)
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
         return f"{self.user.email} - {self.event.title}"
+
+    def confirm(self):
+        """
+        Confirm the booking after a successful payment and send the QR ticket email once.
+        """
+        if self.status == self.STATUS_CONFIRMED and hasattr(self, 'ticket'):
+            return self.ticket
+
+        self.status = self.STATUS_CONFIRMED
+        self.confirmed_at = self.confirmed_at or timezone.now()
+        self.save(update_fields=['status', 'confirmed_at', 'updated_at'])
+
+        ticket, _ = Ticket.objects.get_or_create(booking=self)
+
+        from .services import send_booking_confirmation_email
+
+        send_booking_confirmation_email(self, ticket)
+        return ticket
+
+    def mark_failed(self):
+        if self.status == self.STATUS_CONFIRMED:
+            return
+
+        self.status = self.STATUS_FAILED
+        self.save(update_fields=['status', 'updated_at'])
+
+
+class Payment(models.Model):
+    PROVIDER_MOCK = 'MOCK'
+    PROVIDER_CASH = 'CASH'
+    PROVIDER_FREE = 'FREE'
+    PROVIDER_CHOICES = [
+        (PROVIDER_MOCK, 'Sandbox Gateway'),
+        (PROVIDER_CASH, 'Cash'),
+        (PROVIDER_FREE, 'Free Booking'),
+    ]
+
+    STATUS_INITIATED = 'INITIATED'
+    STATUS_PENDING = 'PENDING'
+    STATUS_SUCCESS = 'SUCCESS'
+    STATUS_FAILED = 'FAILED'
+    STATUS_CHOICES = [
+        (STATUS_INITIATED, 'Initiated'),
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SUCCESS, 'Success'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name='payments',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='payments',
+    )
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default=PROVIDER_MOCK)
+    method = models.CharField(max_length=50, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_INITIATED)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=10, default='USD')
+    external_reference = models.CharField(max_length=100, unique=True)
+    provider_reference = models.CharField(max_length=255, blank=True)
+    checkout_url = models.URLField(blank=True)
+    provider_response = models.JSONField(default=dict, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.external_reference} - {self.status}"
+
 
 class Ticket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -32,14 +144,24 @@ class Ticket(models.Model):
     qr_code = models.ImageField(upload_to='qrcodes/', blank=True, null=True)
     is_scanned = models.BooleanField(default=False)
     scanned_at = models.DateTimeField(null=True, blank=True)
+    checked_in_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='checked_in_tickets',
+    )
+
+    class Meta:
+        ordering = ['-booking__created_at']
 
     def save(self, *args, **kwargs):
         if not self.ticket_code:
             self.ticket_code = f"TICKET-{uuid.uuid4().hex[:12].upper()}"
-        
+
         if not self.qr_code:
             self.generate_qr()
-            
+
         super().save(*args, **kwargs)
 
     def generate_qr(self):
@@ -49,14 +171,25 @@ class Ticket(models.Model):
             box_size=10,
             border=4,
         )
-        qr.add_data(f"TICKET_ID:{self.id}|CODE:{self.ticket_code}")
+        qr.add_data(self.ticket_code)
         qr.make(fit=True)
 
         img = qr.make_image(fill_color="black", back_color="white")
         buffer = BytesIO()
         img.save(buffer, format='PNG')
+        buffer.seek(0)
         filename = f"{self.ticket_code}.png"
-        self.qr_code.save(filename, File(buffer), save=False)
+        self.qr_code.save(filename, ContentFile(buffer.getvalue()), save=False)
+
+    def mark_checked_in(self, checked_in_by):
+        if self.is_scanned:
+            return False
+
+        self.is_scanned = True
+        self.scanned_at = timezone.now()
+        self.checked_in_by = checked_in_by
+        self.save(update_fields=['is_scanned', 'scanned_at', 'checked_in_by'])
+        return True
 
     def __str__(self):
         return self.ticket_code

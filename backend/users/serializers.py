@@ -1,24 +1,149 @@
-from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+from .models import StudentVerification
+
 
 User = get_user_model()
 
+
 class UserSerializer(serializers.ModelSerializer):
+    student_verification_status = serializers.SerializerMethodField()
+    is_student_verified = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'is_staff', 'is_superuser')
+        fields = (
+            'id',
+            'username',
+            'email',
+            'is_staff',
+            'is_superuser',
+            'auth_provider',
+            'student_verification_status',
+            'is_student_verified',
+        )
+
+    def get_student_verification_status(self, obj):
+        verification = getattr(obj, 'student_verification', None)
+        return getattr(verification, 'status', None)
+
+    def get_is_student_verified(self, obj):
+        verification = getattr(obj, 'student_verification', None)
+        return bool(getattr(verification, 'is_approved', False))
+
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, min_length=8)
 
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'password')
 
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return email
+
+    def validate_username(self, value):
+        username = value.strip()
+        if not username:
+            raise serializers.ValidationError('Username is required.')
+        return username
+
     def create(self, validated_data):
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
-            password=validated_data['password']
+            password=validated_data['password'],
+            auth_provider=User.AUTH_PROVIDER_EMAIL,
         )
         return user
+
+
+class GoogleOAuthSerializer(serializers.Serializer):
+    id_token = serializers.CharField()
+
+
+class StudentVerificationSerializer(serializers.ModelSerializer):
+    user_email = serializers.ReadOnlyField(source='user.email')
+    reviewed_by_email = serializers.ReadOnlyField(source='approved_by.email')
+
+    class Meta:
+        model = StudentVerification
+        fields = [
+            'id',
+            'user',
+            'user_email',
+            'student_email',
+            'student_id',
+            'institution_name',
+            'supporting_document',
+            'notes',
+            'status',
+            'rejection_reason',
+            'approved_by',
+            'reviewed_by_email',
+            'reviewed_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'user',
+            'status',
+            'rejection_reason',
+            'approved_by',
+            'reviewed_at',
+            'created_at',
+            'updated_at',
+        ]
+
+    def validate_student_email(self, value):
+        return value.strip().lower()
+
+    def validate_student_id(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Student ID is required.')
+        return value
+
+    def validate_institution_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Institution name is required.')
+        return value
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        verification, _ = StudentVerification.objects.update_or_create(
+            user=user,
+            defaults={
+                **validated_data,
+                'status': StudentVerification.STATUS_PENDING,
+                'rejection_reason': '',
+                'approved_by': None,
+                'reviewed_at': None,
+            },
+        )
+        return verification
+
+
+class StudentVerificationReviewSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[
+            StudentVerification.STATUS_APPROVED,
+            StudentVerification.STATUS_REJECTED,
+        ]
+    )
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if (
+            attrs['status'] == StudentVerification.STATUS_REJECTED
+            and not attrs.get('rejection_reason', '').strip()
+        ):
+            raise serializers.ValidationError(
+                {'rejection_reason': 'A rejection reason is required when rejecting.'}
+            )
+        return attrs

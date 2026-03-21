@@ -3,6 +3,76 @@ import { useNavigate, useParams } from 'react-router-dom';
 import eventService from '../services/eventService';
 import authService from '../services/authService';
 import { Camera, Save, X, Loader2, AlertCircle } from 'lucide-react';
+import LocationPicker from '../components/LocationPicker';
+
+const getLocalDateTimeValue = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    const date = new Date(value);
+    const timezoneOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+};
+
+const validateFormData = (formData) => {
+    const nextErrors = {};
+
+    if (!formData.title.trim()) {
+        nextErrors.title = 'Title is required.';
+    }
+
+    if (!formData.location.trim()) {
+        nextErrors.location = 'Location is required.';
+    }
+
+    if (!formData.category) {
+        nextErrors.category = 'Please select a category.';
+    }
+
+    if (!formData.date) {
+        nextErrors.date = 'Date and time are required.';
+    } else {
+        const parsed = new Date(formData.date);
+        if (isNaN(parsed.getTime()) || parsed.getFullYear() > 2100) {
+            nextErrors.date = 'Please enter a valid date (year <= 2100).';
+        } else if (parsed <= new Date()) {
+            nextErrors.date = 'Please choose a future date and time.';
+        }
+    }
+
+    if (Number(formData.capacity) <= 0) {
+        nextErrors.capacity = 'Capacity must be greater than 0.';
+    }
+
+    if (Number(formData.price) < 0) {
+        nextErrors.price = 'Price cannot be negative.';
+    }
+
+    if (formData.parking_map_url) {
+        try {
+            new URL(formData.parking_map_url);
+        } catch {
+            nextErrors.parking_map_url = 'Enter a valid parking map URL.';
+        }
+    }
+
+    if (
+        formData.latitude !== '' &&
+        (Number.isNaN(Number(formData.latitude)) || Number(formData.latitude) < -90 || Number(formData.latitude) > 90)
+    ) {
+        nextErrors.latitude = 'Latitude must be between -90 and 90.';
+    }
+
+    if (
+        formData.longitude !== '' &&
+        (Number.isNaN(Number(formData.longitude)) || Number(formData.longitude) < -180 || Number(formData.longitude) > 180)
+    ) {
+        nextErrors.longitude = 'Longitude must be between -180 and 180.';
+    }
+
+    return nextErrors;
+};
 
 function EventForm() {
     const { id } = useParams();
@@ -14,12 +84,17 @@ function EventForm() {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(isEditMode);
     const [error, setError] = useState(null);
+    const [fieldErrors, setFieldErrors] = useState({});
 
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         date: '',
         location: '',
+        parking_info: '',
+        parking_map_url: '',
+        latitude: '',
+        longitude: '',
         category: '',
         price: '0.00',
         capacity: '100',
@@ -50,15 +125,15 @@ function EventForm() {
     const fetchEventDetails = async () => {
         try {
             const data = await eventService.getEventById(id);
-            // Format date for input type="datetime-local"
-            const date = new Date(data.date);
-            const formattedDate = date.toISOString().slice(0, 16);
-
             setFormData({
                 title: data.title,
                 description: data.description,
-                date: formattedDate,
+                date: getLocalDateTimeValue(data.date),
                 location: data.location,
+                parking_info: data.parking_info || '',
+                parking_map_url: data.parking_map_url || '',
+                latitude: data.latitude || '',
+                longitude: data.longitude || '',
                 category: data.category || '',
                 price: data.price,
                 capacity: data.capacity,
@@ -75,7 +150,22 @@ function EventForm() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        setFieldErrors(prev => ({ ...prev, [name]: undefined }));
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleLocationSelect = async (lat, lng) => {
+        setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+            const data = await res.json();
+            if (data && data.display_name) {
+                setFormData(prev => ({ ...prev, location: data.display_name }));
+                setFieldErrors(prev => ({ ...prev, location: undefined, latitude: undefined, longitude: undefined }));
+            }
+        } catch (err) {
+            console.error('Failed to reverse geocode', err);
+        }
     };
 
     const handleImageChange = (e) => {
@@ -92,12 +182,31 @@ function EventForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const nextErrors = validateFormData(formData);
+        if (Object.keys(nextErrors).length > 0) {
+            setFieldErrors(nextErrors);
+            setError('Please fix the highlighted fields.');
+            return;
+        }
+
         setLoading(true);
         setError(null);
+        setFieldErrors({});
 
         const data = new FormData();
         Object.keys(formData).forEach(key => {
-            data.append(key, formData[key]);
+            if (formData[key] !== '') {
+                if (key === 'date') {
+                    try {
+                        const dateObj = new Date(formData.date);
+                        data.append(key, dateObj.toISOString());
+                    } catch (e) {
+                        data.append(key, formData[key]);
+                    }
+                } else {
+                    data.append(key, formData[key]);
+                }
+            }
         });
         if (imageFile) {
             data.append('image', imageFile);
@@ -108,6 +217,7 @@ function EventForm() {
                 await eventService.updateEvent(id, data, user.access || user.token);
             } else {
                 await eventService.createEvent(data, user.access || user.token);
+                alert('Event created successfully! It is now pending admin approval.');
             }
             navigate('/events');
         } catch (err) {
@@ -196,6 +306,7 @@ function EventForm() {
                                     placeholder="e.g. Annual Tech Conference 2024"
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
+                                {fieldErrors.title && <p className="text-sm text-red-600">{fieldErrors.title}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -212,6 +323,7 @@ function EventForm() {
                                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                                     ))}
                                 </select>
+                                {fieldErrors.category && <p className="text-sm text-red-600">{fieldErrors.category}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -224,19 +336,21 @@ function EventForm() {
                                     onChange={handleChange}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
+                                {fieldErrors.date && <p className="text-sm text-red-600">{fieldErrors.date}</p>}
                             </div>
 
                             <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Location</label>
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Location Name/Address</label>
                                 <input
                                     type="text"
                                     name="location"
                                     required
                                     value={formData.location}
                                     onChange={handleChange}
-                                    placeholder="e.g. Grand Hall, City Center"
+                                    placeholder="Type or click map to auto-fill"
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
+                                {fieldErrors.location && <p className="text-sm text-red-600">{fieldErrors.location}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -251,6 +365,7 @@ function EventForm() {
                                     onChange={handleChange}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
+                                {fieldErrors.price && <p className="text-sm text-red-600">{fieldErrors.price}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -264,6 +379,44 @@ function EventForm() {
                                     onChange={handleChange}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
+                                {fieldErrors.capacity && <p className="text-sm text-red-600">{fieldErrors.capacity}</p>}
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Parking Info</label>
+                                <textarea
+                                    name="parking_info"
+                                    rows="3"
+                                    value={formData.parking_info}
+                                    onChange={handleChange}
+                                    placeholder="Share parking guidance, entry gates, landmarks, or restrictions."
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none resize-none"
+                                />
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Parking Map URL</label>
+                                <input
+                                    type="url"
+                                    name="parking_map_url"
+                                    value={formData.parking_map_url}
+                                    onChange={handleChange}
+                                    placeholder="https://maps.google.com/..."
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
+                                />
+                                {fieldErrors.parking_map_url && <p className="text-sm text-red-600">{fieldErrors.parking_map_url}</p>}
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Map Location</label>
+                                <LocationPicker 
+                                    latitude={formData.latitude} 
+                                    longitude={formData.longitude} 
+                                    onLocationSelect={handleLocationSelect} 
+                                />
+                                {(fieldErrors.latitude || fieldErrors.longitude) && 
+                                    <p className="text-sm text-red-600">Please select a location on the map.</p>
+                                }
                             </div>
                         </div>
 

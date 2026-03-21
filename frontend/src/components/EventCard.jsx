@@ -23,10 +23,15 @@ const EventCard = ({ event }) => {
                         <Tag className="w-12 h-12 text-indigo-200" />
                     </div>
                 )}
-                <div className="absolute top-4 left-4">
+                <div className="absolute top-4 left-4 flex gap-2">
                     <span className="bg-white/90 backdrop-blur-sm text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">
                         {event.category_name || 'Event'}
                     </span>
+                    {!event.is_approved && (
+                        <span className="bg-amber-100/90 backdrop-blur-sm text-amber-600 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm border border-amber-200">
+                            Pending Approval
+                        </span>
+                    )}
                 </div>
             </div>
 

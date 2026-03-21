@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import adminService from '../services/adminService';
 import authService from '../services/authService';
 import OfflineBookingForm from '../components/OfflineBookingForm';
+import eventService from '../services/eventService';
 import { Users, Calendar, ShoppingCart, DollarSign, ArrowUpRight, Loader2, TrendingUp, Clock } from 'lucide-react';
 
 
@@ -80,36 +81,90 @@ function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Latest Bookings Table */}
-                    <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                <Clock className="w-5 h-5 text-indigo-500" />
-                                Recent Activity
-                            </h3>
-                            <button className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">View all</button>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-gray-50/50">
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">User</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Event</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {stats.latest_bookings.map((booking) => (
-                                        <tr key={booking.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-4 text-sm font-medium text-gray-700">{booking.user}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-600 font-medium">{booking.event}</td>
-                                            <td className="px-6 py-4 text-sm font-bold text-indigo-600">${booking.amount}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">{new Date(booking.date).toLocaleDateString()}</td>
+                    {/* Main Content Area */}
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* Pending Approvals */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-amber-50/30">
+                                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-amber-500" />
+                                    Pending Approvals
+                                </h3>
+                                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
+                                    {stats.pending_events.length} Action Required
+                                </span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-gray-50/50">
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Event Title</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Organizer</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {stats.pending_events.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="3" className="px-6 py-10 text-center text-gray-500 italic">No pending approvals at the moment.</td>
+                                            </tr>
+                                        ) : (
+                                            stats.pending_events.map((event) => (
+                                                <tr key={event.id} className="hover:bg-gray-50/50 transition-colors">
+                                                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{event.title}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-500">{event.organizer}</td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await eventService.approveEvent(event.id, user.access || user.token);
+                                                                    fetchStats();
+                                                                } catch (err) {
+                                                                    alert('Failed to approve event');
+                                                                }
+                                                            }}
+                                                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
+                                                        >
+                                                            Approve
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Recent Activity Table */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <ShoppingCart className="w-5 h-5 text-indigo-500" />
+                                    Recent Bookings
+                                </h3>
+                                <button className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">View all</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-gray-50/50">
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">User</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Event</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {stats.latest_bookings.map((booking) => (
+                                            <tr key={booking.id} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-6 py-4 text-sm font-medium text-gray-700 truncate max-w-[150px]">{booking.user}</td>
+                                                <td className="px-6 py-4 text-sm text-gray-600 font-medium truncate max-w-[200px]">{booking.event}</td>
+                                                <td className="px-6 py-4 text-sm font-bold text-indigo-600 text-right">${booking.amount}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 

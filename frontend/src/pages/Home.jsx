@@ -53,9 +53,6 @@ function Home() {
                 Explore Events
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link to="/signup" className="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 font-bold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-all">
-                Get Started for Free
-              </Link>
             </div>
           </div>
         </div>
