@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import authService from '../services/authService';
 import { Mail, Lock, User, Loader2, ArrowRight, Sparkles } from 'lucide-react';
 
@@ -12,6 +12,8 @@ function Signup() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const location = useLocation();
+    const redirectTo = location.state?.from?.pathname || '/';
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -23,7 +25,7 @@ function Signup() {
         setError('');
         try {
             await authService.register(formData);
-            navigate('/login');
+            navigate(redirectTo, { replace: true });
         } catch (err) {
             setError(err.message || 'Registration failed. Please try again.');
         } finally {

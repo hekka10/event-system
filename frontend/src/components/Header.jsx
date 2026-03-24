@@ -1,11 +1,11 @@
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket } from "lucide-react";
+import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket, BadgeCheck } from "lucide-react";
 import authService from "../services/authService";
 
 function Header() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
-  const isAdmin = user && (user.is_staff || user.is_superuser);
+  const isAdmin = authService.isAdmin(user);
 
   const handleLogout = () => {
     authService.logout();
@@ -45,6 +45,10 @@ function Header() {
                     <PlusSquare className="w-4 h-4" />
                     Create Event
                   </Link>
+                  <Link to="/student-verification" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                    <BadgeCheck className="w-4 h-4" />
+                    Student Verification
+                  </Link>
                 </>
               )}
             </nav>
@@ -58,6 +62,11 @@ function Header() {
                     <User className="w-4 h-4" />
                   </div>
                   <span className="text-sm font-medium text-gray-700">{user.username || user.email.split('@')[0]}</span>
+                  {user.is_student_verified && (
+                    <span className="text-[10px] uppercase tracking-wide font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                      Student
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={handleLogout}
@@ -85,4 +94,3 @@ function Header() {
 }
 
 export default Header;
-

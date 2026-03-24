@@ -6,7 +6,7 @@ from events.models import Event
 from events.serializers import EventSerializer
 
 from .models import Booking, Payment, Ticket
-from .services import calculate_booking_pricing
+from .services import create_pending_booking, get_booking_validation_error
 
 
 User = get_user_model()
@@ -14,6 +14,7 @@ User = get_user_model()
 
 class TicketSerializer(serializers.ModelSerializer):
     checked_in_by_email = serializers.ReadOnlyField(source='checked_in_by.email')
+    qr_code_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -21,11 +22,22 @@ class TicketSerializer(serializers.ModelSerializer):
             'id',
             'ticket_code',
             'qr_code',
+            'qr_code_url',
             'is_scanned',
             'scanned_at',
             'checked_in_by',
             'checked_in_by_email',
         ]
+
+    def get_qr_code_url(self, obj):
+        if not obj.qr_code:
+            return None
+
+        request = self.context.get('request')
+        url = obj.qr_code.url
+        if request is None:
+            return url
+        return request.build_absolute_uri(url)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -96,27 +108,10 @@ class BookingSerializer(serializers.ModelSerializer):
 
 class BookingRequestValidationMixin:
     def validate_booking_request(self, user, event):
-        if event.date <= timezone.now():
-            raise serializers.ValidationError({'event': 'Cannot book an event that is in the past.'})
-
-        if not event.is_approved:
-            raise serializers.ValidationError({'event': 'Cannot book an unapproved event.'})
-
-        existing_booking = Booking.objects.filter(user=user, event=event).exclude(
-            status__in=[Booking.STATUS_CANCELLED, Booking.STATUS_FAILED]
-        )
-        if self.instance is not None:
-            existing_booking = existing_booking.exclude(pk=self.instance.pk)
-
-        if existing_booking.exists():
-            raise serializers.ValidationError({'non_field_errors': 'You have already booked this event.'})
-
-        confirmed_bookings = Booking.objects.filter(
-            event=event,
-            status=Booking.STATUS_CONFIRMED,
-        ).count()
-        if confirmed_bookings >= event.capacity:
-            raise serializers.ValidationError({'event': 'This event is already at full capacity.'})
+        booking_id = getattr(self.instance, 'pk', None)
+        error = get_booking_validation_error(user, event, booking_id_to_ignore=booking_id)
+        if error:
+            raise serializers.ValidationError(error)
 
 
 class BookingCreateSerializer(BookingRequestValidationMixin, serializers.ModelSerializer):
@@ -141,18 +136,7 @@ class BookingCreateSerializer(BookingRequestValidationMixin, serializers.ModelSe
     def create(self, validated_data):
         user = validated_data.pop('target_user')
         validated_data.pop('user_email', None)
-        pricing = calculate_booking_pricing(user, validated_data['event'])
-
-        return Booking.objects.create(
-            user=user,
-            event=validated_data['event'],
-            status=Booking.STATUS_PENDING,
-            booking_source=Booking.SOURCE_ONLINE,
-            is_student=pricing['is_student'],
-            base_price=pricing['base_price'],
-            discount_amount=pricing['discount_amount'],
-            total_price=pricing['total_price'],
-        )
+        return create_pending_booking(user, validated_data['event'], booking_source=Booking.SOURCE_ONLINE)
 
 
 class PaymentInitiationSerializer(BookingRequestValidationMixin, serializers.Serializer):

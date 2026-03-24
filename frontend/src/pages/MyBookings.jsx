@@ -1,33 +1,128 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import bookingService from '../services/bookingService';
 import authService from '../services/authService';
-import { Calendar, MapPin, Ticket, Loader2, ExternalLink, QrCode, ArrowRight } from 'lucide-react';
+import TicketPreviewCard from '../components/TicketPreviewCard';
+import {
+    ArrowRight,
+    Calendar,
+    CheckCircle2,
+    Clock3,
+    ExternalLink,
+    Loader2,
+    MapPin,
+    QrCode,
+    Receipt,
+    ScanLine,
+    Ticket,
+    XCircle,
+} from 'lucide-react';
+
+const STATUS_FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'FAILED'];
+
+const formatDateTime = (value) => {
+    if (!value) {
+        return 'Not available';
+    }
+
+    return new Date(value).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+const getStatusMeta = (booking) => {
+    if (booking.status === 'CONFIRMED') {
+        return {
+            label: 'Confirmed',
+            className: 'bg-emerald-500 text-white',
+            description: booking.ticket?.is_scanned
+                ? 'Checked in at the venue.'
+                : 'Your seat is reserved and ticket is ready.',
+        };
+    }
+
+    if (booking.status === 'FAILED') {
+        return {
+            label: 'Failed',
+            className: 'bg-rose-500 text-white',
+            description: 'This booking did not complete successfully.',
+        };
+    }
+
+    return {
+        label: 'Pending',
+        className: 'bg-amber-500 text-white',
+        description: booking.latest_payment?.status === 'FAILED'
+            ? 'Payment failed. Start a new booking from the event page.'
+            : 'Waiting for payment confirmation.',
+    };
+};
 
 function MyBookings() {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [notice, setNotice] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [expandedTicketBookingId, setExpandedTicketBookingId] = useState(null);
     const user = authService.getCurrentUser();
+    const token = user?.access || user?.token || '';
     const navigate = useNavigate();
+    const location = useLocation();
 
     useEffect(() => {
-        if (!user) {
+        setNotice(location.state?.message || '');
+    }, [location.state]);
+
+    useEffect(() => {
+        if (!token) {
             navigate('/login');
             return;
         }
-        fetchBookings();
-    }, []);
+        const loadBookings = async () => {
+            try {
+                const data = await bookingService.getMyBookings(token);
+                setBookings(data);
+                setError(null);
+            } catch {
+                setError('Failed to load your bookings.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadBookings();
+    }, [navigate, token]);
 
     const fetchBookings = async () => {
         try {
-            const data = await bookingService.getMyBookings(user.access || user.token);
+            setError(null);
+            const data = await bookingService.getMyBookings(token);
             setBookings(data);
-        } catch (err) {
+        } catch {
             setError('Failed to load your bookings.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const filteredBookings = bookings.filter((booking) => {
+        if (statusFilter === 'ALL') {
+            return true;
+        }
+
+        return booking.status === statusFilter;
+    });
+
+    const summary = {
+        total: bookings.length,
+        confirmed: bookings.filter((booking) => booking.status === 'CONFIRMED').length,
+        pending: bookings.filter((booking) => booking.status === 'PENDING').length,
+        checkedIn: bookings.filter((booking) => booking.ticket?.is_scanned).length,
     };
 
     if (loading) {
@@ -63,9 +158,58 @@ function MyBookings() {
                     </div>
                 )}
 
-                {bookings.length > 0 ? (
+                {notice && (
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-6 rounded-2xl text-center mb-8">
+                        <p>{notice}</p>
+                    </div>
+                )}
+
+                {bookings.length > 0 && (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Total Bookings</p>
+                                <p className="mt-3 text-3xl font-extrabold text-gray-900">{summary.total}</p>
+                            </div>
+                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Confirmed</p>
+                                <p className="mt-3 text-3xl font-extrabold text-emerald-600">{summary.confirmed}</p>
+                            </div>
+                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Pending</p>
+                                <p className="mt-3 text-3xl font-extrabold text-amber-500">{summary.pending}</p>
+                            </div>
+                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Checked In</p>
+                                <p className="mt-3 text-3xl font-extrabold text-indigo-600">{summary.checkedIn}</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-8 flex flex-wrap gap-3">
+                            {STATUS_FILTERS.map((filterValue) => (
+                                <button
+                                    key={filterValue}
+                                    type="button"
+                                    onClick={() => setStatusFilter(filterValue)}
+                                    className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                                        statusFilter === filterValue
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {filterValue === 'ALL' ? 'All Bookings' : filterValue.charAt(0) + filterValue.slice(1).toLowerCase()}
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {filteredBookings.length > 0 ? (
                     <div className="space-y-6">
-                        {bookings.map((booking) => (
+                        {filteredBookings.map((booking) => {
+                            const statusMeta = getStatusMeta(booking);
+
+                            return (
                             <div key={booking.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row">
                                 {/* Event Image / Placeholder */}
                                 <div className="w-full md:w-56 h-48 md:h-auto bg-gray-100 relative shrink-0">
@@ -77,9 +221,8 @@ function MyBookings() {
                                         </div>
                                     )}
                                     <div className="absolute top-4 left-4">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm
-                      ${booking.status === 'CONFIRMED' ? 'bg-green-500 text-white' : 'bg-yellow-500 text-white'}`}>
-                                            {booking.status}
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${statusMeta.className}`}>
+                                            {statusMeta.label}
                                         </span>
                                     </div>
                                 </div>
@@ -94,30 +237,109 @@ function MyBookings() {
                                             <span className="text-lg font-bold text-indigo-600">${booking.total_price}</span>
                                         </div>
 
+                                        <p className="text-sm text-gray-500 mb-4">{statusMeta.description}</p>
+
                                         <div className="flex flex-wrap gap-4 text-sm text-gray-500 mb-4">
                                             <div className="flex items-center gap-1.5">
                                                 <Calendar className="w-4 h-4 text-indigo-400" />
-                                                {new Date(booking.event_details.date).toLocaleDateString()}
+                                                {formatDateTime(booking.event_details.date)}
                                             </div>
                                             <div className="flex items-center gap-1.5">
                                                 <MapPin className="w-4 h-4 text-indigo-400" />
                                                 {booking.event_details.location}
                                             </div>
                                         </div>
+
+                                        <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">
+                                            <span className="bg-gray-100 px-3 py-1 rounded-full">
+                                                {booking.booking_source}
+                                            </span>
+                                            {booking.is_student && (
+                                                <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full">
+                                                    Student Discount
+                                                </span>
+                                            )}
+                                            {booking.ticket?.is_scanned && (
+                                                <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full">
+                                                    Checked In
+                                                </span>
+                                            )}
+                                            {booking.latest_payment && (
+                                                <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full">
+                                                    Payment {booking.latest_payment.status}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {booking.discount_amount > 0 && (
+                                            <p className="text-sm text-emerald-600 font-medium mb-4">
+                                                Saved ${booking.discount_amount} with verified student pricing.
+                                            </p>
+                                        )}
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Booked On</p>
+                                                <p>{formatDateTime(booking.created_at)}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Confirmed On</p>
+                                                <p>{booking.confirmed_at ? formatDateTime(booking.confirmed_at) : 'Awaiting confirmation'}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Payment Status</p>
+                                                <p>{booking.latest_payment?.status || 'Not started'}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Ticket Code</p>
+                                                <p>{booking.ticket?.ticket_code || 'Generated after confirmation'}</p>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div className="pt-6 border-t border-gray-50 flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
+                                    <div className="pt-6 border-t border-gray-50 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                                        <div className="flex flex-wrap items-center gap-3">
                                             {booking.ticket && (
-                                                <a
-                                                    href={booking.ticket.qr_code}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedTicketBookingId((currentId) => (
+                                                        currentId === booking.id ? null : booking.id
+                                                    ))}
                                                     className="flex items-center gap-2 text-sm font-semibold text-gray-700 bg-gray-50 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
                                                 >
-                                                    <QrCode className="w-4 h-4" />
-                                                    View Ticket
-                                                </a>
+                                                    {expandedTicketBookingId === booking.id ? <ScanLine className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
+                                                    {expandedTicketBookingId === booking.id ? 'Hide Ticket' : 'Show Ticket'}
+                                                </button>
+                                            )}
+                                            {booking.ticket?.is_scanned && (
+                                                <span className="flex items-center gap-2 text-sm font-semibold text-indigo-700 bg-indigo-50 px-4 py-2 rounded-lg">
+                                                    <CheckCircle2 className="w-4 h-4" />
+                                                    Checked In
+                                                </span>
+                                            )}
+                                            {booking.latest_payment && booking.status === 'PENDING' && booking.latest_payment.status !== 'FAILED' && (
+                                                <Link
+                                                    to={`/checkout/${booking.latest_payment.id}`}
+                                                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    <Clock3 className="w-4 h-4" />
+                                                    Complete Payment
+                                                </Link>
+                                            )}
+                                            {booking.status === 'FAILED' && (
+                                                <Link
+                                                    to={`/events/${booking.event}`}
+                                                    className="flex items-center gap-2 text-sm font-semibold text-rose-600 bg-rose-50 px-4 py-2 rounded-lg hover:bg-rose-100 transition-colors"
+                                                >
+                                                    <XCircle className="w-4 h-4" />
+                                                    Book Again
+                                                </Link>
+                                            )}
+                                            {booking.latest_payment && (
+                                                <span className="flex items-center gap-2 text-sm font-semibold text-gray-700 bg-gray-50 px-4 py-2 rounded-lg">
+                                                    <Receipt className="w-4 h-4" />
+                                                    {booking.latest_payment.provider}
+                                                </span>
                                             )}
                                         </div>
                                         <Link
@@ -128,9 +350,30 @@ function MyBookings() {
                                             <ExternalLink className="w-4 h-4" />
                                         </Link>
                                     </div>
+
+                                    {expandedTicketBookingId === booking.id && booking.ticket && (
+                                        <TicketPreviewCard booking={booking} />
+                                    )}
                                 </div>
                             </div>
-                        ))}
+                        )})}
+                    </div>
+                ) : bookings.length > 0 ? (
+                    <div className="bg-white rounded-3xl border border-dashed border-gray-300 p-16 text-center">
+                        <div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Ticket className="w-10 h-10 text-indigo-400" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">No bookings in this filter</h3>
+                        <p className="text-gray-500 mb-8 max-w-sm mx-auto">
+                            Switch filters to view your other bookings and ticket statuses.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('ALL')}
+                            className="inline-flex bg-indigo-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                        >
+                            Show All Bookings
+                        </button>
                     </div>
                 ) : (
                     <div className="bg-white rounded-3xl border border-dashed border-gray-300 p-16 text-center">

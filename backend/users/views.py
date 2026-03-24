@@ -48,6 +48,9 @@ class RegisterView(generics.CreateAPIView):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
+        username_value = attrs.get(self.username_field, '')
+        if isinstance(username_value, str):
+            attrs[self.username_field] = username_value.strip().lower()
         super().validate(attrs)
         return build_auth_response(self.user)
 

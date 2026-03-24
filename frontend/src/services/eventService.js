@@ -1,126 +1,86 @@
-const API_URL = `${import.meta.env.VITE_API_URL}/events`;
+import { getAuthHeaders, request } from './api';
 
-const parseErrorMessage = (data, fallbackMessage) => {
-    if (!data) {
-        return fallbackMessage;
-    }
-
-    if (typeof data === 'string') {
-        return data;
-    }
-
-    if (data.message) {
-        return data.message;
-    }
-
-    const firstEntry = Object.entries(data)[0];
-    if (!firstEntry) {
-        return fallbackMessage;
-    }
-
-    const [field, messages] = firstEntry;
-    if (Array.isArray(messages)) {
-        return `${field}: ${messages.join(', ')}`;
-    }
-
-    return `${field}: ${messages}`;
+const getAllEvents = async (category = '', token = '') => {
+  const query = category ? `?category=${category}` : '';
+  return request(
+    `/events/${query}`,
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch events'
+  );
 };
 
-const getAllEvents = async (category = '') => {
-    const url = category ? `${API_URL}/?category=${category}` : API_URL;
-    const response = await fetch(url);
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch events');
-    }
-    return data;
-};
-
-const getEventById = async (id) => {
-    const response = await fetch(`${API_URL}/${id}/`);
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch event');
-    }
-    return data;
+const getEventById = async (id, token = '') => {
+  return request(
+    `/events/${id}/`,
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch event'
+  );
 };
 
 const createEvent = async (eventData, token) => {
-    const response = await fetch(`${API_URL}/`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-        body: eventData, // FormData for images
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(parseErrorMessage(data, 'Failed to create event'));
-    }
-    return data;
+  return request(
+    '/events/',
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: eventData,
+    },
+    'Failed to create event'
+  );
 };
 
 const updateEvent = async (id, eventData, token) => {
-    const response = await fetch(`${API_URL}/${id}/`, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-        body: eventData, // FormData for images
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(parseErrorMessage(data, 'Failed to update event'));
-    }
-    return data;
+  return request(
+    `/events/${id}/`,
+    {
+      method: 'PATCH',
+      headers: getAuthHeaders(token),
+      body: eventData,
+    },
+    'Failed to update event'
+  );
 };
 
 const deleteEvent = async (id, token) => {
-    const response = await fetch(`${API_URL}/${id}/`, {
-        method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-    if (!response.ok) {
-        const data = await response.json();
-        throw new Error(parseErrorMessage(data, 'Failed to delete event'));
-    }
-    return true;
+  return request(
+    `/events/${id}/`,
+    {
+      method: 'DELETE',
+      headers: getAuthHeaders(token),
+    },
+    'Failed to delete event'
+  );
 };
 
 const getCategories = async () => {
-    const response = await fetch(`${API_URL}/categories/`);
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch categories');
-    }
-    return data;
+  return request('/events/categories/', {}, 'Failed to fetch categories');
 };
 
 const approveEvent = async (id, token) => {
-    const response = await fetch(`${API_URL}/${id}/approve/`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(parseErrorMessage(data, 'Failed to approve event'));
-    }
-    return data;
+  return request(
+    `/events/${id}/approve/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+    },
+    'Failed to approve event'
+  );
 };
 
 const eventService = {
-    getAllEvents,
-    getEventById,
-    createEvent,
-    updateEvent,
-    deleteEvent,
-    getCategories,
-    approveEvent,
+  getAllEvents,
+  getEventById,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  getCategories,
+  approveEvent,
 };
 
 export default eventService;

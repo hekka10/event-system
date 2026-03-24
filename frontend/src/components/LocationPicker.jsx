@@ -53,7 +53,7 @@ export default function LocationPicker({ latitude, longitude, onLocationSelect }
             // but if the component truly unmounts, leaflet map should be removed.
             // Vite hot reloading sometimes causes issues here, so we wrap it.
         };
-    }, [latitude, longitude]);
+    }, [latitude, longitude, onLocationSelect]);
 
     // Handle full cleanup on unmount only
     useEffect(() => {

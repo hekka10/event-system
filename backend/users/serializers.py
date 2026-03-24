@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from .models import StudentVerification
@@ -50,7 +51,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         username = value.strip()
         if not username:
             raise serializers.ValidationError('Username is required.')
+        if User.objects.filter(username=username).exists():
+            raise serializers.ValidationError('A user with this username already exists.')
         return username
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
 
     def create(self, validated_data):
         user = User.objects.create_user(

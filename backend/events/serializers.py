@@ -74,7 +74,7 @@ class EventSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_confirmed_booking_count(self, obj):
-        return obj.bookings.filter(status='CONFIRMED').count()
+        return getattr(obj, 'confirmed_booking_count_value', obj.bookings.filter(status='CONFIRMED').count())
 
     def get_remaining_capacity(self, obj):
         return max(obj.capacity - self.get_confirmed_booking_count(obj), 0)

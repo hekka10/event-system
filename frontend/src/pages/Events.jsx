@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
 import { Filter, Loader2, Sparkles } from 'lucide-react';
+import authService from '../services/authService';
 
 function Events() {
   const [events, setEvents] = useState([]);
@@ -9,31 +11,51 @@ function Events() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState('');
+  const user = authService.getCurrentUser();
+  const location = useLocation();
 
   useEffect(() => {
-    fetchCategories();
+    setNotice(location.state?.message || '');
+  }, [location.state]);
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const data = await eventService.getCategories();
+        setCategories(data);
+      } catch (categoryError) {
+        console.error('Error fetching categories:', categoryError);
+      }
+    };
+
+    loadCategories();
   }, []);
 
   useEffect(() => {
-    fetchEvents();
-  }, [selectedCategory]);
+    const loadEvents = async () => {
+      setLoading(true);
+      try {
+        const data = await eventService.getAllEvents(selectedCategory, user?.access || user?.token || '');
+        setEvents(data);
+        setError(null);
+      } catch {
+        setError('Failed to load events. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const fetchCategories = async () => {
-    try {
-      const data = await eventService.getCategories();
-      setCategories(data);
-    } catch (err) {
-      console.error('Error fetching categories:', err);
-    }
-  };
+    loadEvents();
+  }, [selectedCategory, user?.access, user?.token]);
 
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const data = await eventService.getAllEvents(selectedCategory);
+      const data = await eventService.getAllEvents(selectedCategory, user?.access || user?.token || '');
       setEvents(data);
       setError(null);
-    } catch (err) {
+    } catch {
       setError('Failed to load events. Please try again later.');
     } finally {
       setLoading(false);
@@ -52,7 +74,26 @@ function Events() {
           <p className="mt-4 text-xl text-gray-500 max-w-2xl mx-auto">
             Find the best workshops, conferences, and meetups happening near you.
           </p>
+          {user && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <Link
+                to="/create-event"
+                className="inline-flex items-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition-colors hover:bg-indigo-700"
+              >
+                Create Event
+              </Link>
+              <p className="text-sm text-gray-500">
+                Your pending events stay visible to you while they wait for admin approval.
+              </p>
+            </div>
+          )}
         </div>
+
+        {notice && (
+          <div className="mb-8 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+            {notice}
+          </div>
+        )}
 
         {/* Filters Section */}
         <div className="mb-10 flex flex-wrap items-center justify-center gap-4">
@@ -124,4 +165,3 @@ function Events() {
 }
 
 export default Events;
-

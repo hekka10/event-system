@@ -9,39 +9,83 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0001_initial'),
+        ("users", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='auth_provider',
-            field=models.CharField(choices=[('EMAIL', 'Email'), ('GOOGLE', 'Google')], default='EMAIL', max_length=20),
+            model_name="user",
+            name="auth_provider",
+            field=models.CharField(
+                choices=[("EMAIL", "Email"), ("GOOGLE", "Google")],
+                default="EMAIL",
+                max_length=20,
+            ),
         ),
         migrations.AddField(
-            model_name='user',
-            name='google_sub',
+            model_name="user",
+            name="google_sub",
             field=models.CharField(blank=True, max_length=255, null=True, unique=True),
         ),
         migrations.CreateModel(
-            name='StudentVerification',
+            name="StudentVerification",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('student_email', models.EmailField(max_length=254)),
-                ('student_id', models.CharField(max_length=100)),
-                ('institution_name', models.CharField(max_length=255)),
-                ('supporting_document', models.FileField(blank=True, null=True, upload_to='student-verifications/')),
-                ('notes', models.TextField(blank=True)),
-                ('status', models.CharField(choices=[('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('REJECTED', 'Rejected')], default='PENDING', max_length=20)),
-                ('rejection_reason', models.TextField(blank=True)),
-                ('reviewed_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('approved_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approved_student_verifications', to=settings.AUTH_USER_MODEL)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='student_verification', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("student_email", models.EmailField(max_length=254)),
+                ("student_id", models.CharField(max_length=100)),
+                ("institution_name", models.CharField(max_length=255)),
+                (
+                    "supporting_document",
+                    models.FileField(
+                        blank=True, null=True, upload_to="student-verifications/"
+                    ),
+                ),
+                ("notes", models.TextField(blank=True)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("PENDING", "Pending"),
+                            ("APPROVED", "Approved"),
+                            ("REJECTED", "Rejected"),
+                        ],
+                        default="PENDING",
+                        max_length=20,
+                    ),
+                ),
+                ("rejection_reason", models.TextField(blank=True)),
+                ("reviewed_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "approved_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="approved_student_verifications",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="student_verification",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
     ]

@@ -1,51 +1,114 @@
-const API_URL = `${import.meta.env.VITE_API_URL}/bookings`;
+import { getAuthHeaders, request } from './api';
 
 const createBooking = async (bookingData, token) => {
-    const response = await fetch(`${API_URL}/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(bookingData),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to create booking');
-    }
-    return data;
+  return request(
+    '/bookings/',
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify(bookingData),
+    },
+    'Failed to create booking'
+  );
 };
 
 const getMyBookings = async (token) => {
-    const response = await fetch(`${API_URL}/`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch bookings');
-    }
-    return data;
+  return request(
+    '/bookings/',
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch bookings'
+  );
 };
 
 const getBookingById = async (id, token) => {
-    const response = await fetch(`${API_URL}/${id}/`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch booking');
-    }
-    return data;
+  return request(
+    `/bookings/${id}/`,
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch booking'
+  );
+};
+
+const initiatePayment = async (payload, token) => {
+  return request(
+    '/bookings/initiate-payment/',
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify(payload),
+    },
+    'Failed to start checkout'
+  );
+};
+
+const getPayment = async (paymentId, token) => {
+  return request(
+    `/bookings/payments/${paymentId}/`,
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch payment details'
+  );
+};
+
+const verifyPayment = async (paymentId, payload, token) => {
+  return request(
+    `/bookings/payments/${paymentId}/verify/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify(payload),
+    },
+    'Failed to verify payment'
+  );
+};
+
+const createOfflineBooking = async (payload, token) => {
+  return request(
+    '/bookings/offline/',
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify(payload),
+    },
+    'Failed to create offline booking'
+  );
+};
+
+const scanTicket = async (payload, token) => {
+  return request(
+    '/bookings/tickets/scan/',
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify(payload),
+    },
+    'Failed to scan ticket'
+  );
 };
 
 const bookingService = {
-    createBooking,
-    getMyBookings,
-    getBookingById,
+  createBooking,
+  getMyBookings,
+  getBookingById,
+  initiatePayment,
+  getPayment,
+  verifyPayment,
+  createOfflineBooking,
+  scanTicket,
 };
 
 export default bookingService;

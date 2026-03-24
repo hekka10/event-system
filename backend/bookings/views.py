@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,38 +18,18 @@ from .serializers import (
 )
 from .services import (
     build_payment_reference,
-    calculate_booking_pricing,
+    create_pending_booking,
     create_payment_for_booking,
+    get_booking_validation_error,
     get_or_create_offline_user,
     process_failed_payment,
     process_successful_payment,
 )
 
 
-def validate_booking_eligibility(user, event):
-    if event.date <= timezone.now():
-        return 'Cannot create a booking for a past event.'
-
-    if not event.is_approved:
-        return 'Bookings are only allowed for approved events.'
-
-    if Booking.objects.filter(user=user, event=event).exclude(
-        status__in=[Booking.STATUS_CANCELLED, Booking.STATUS_FAILED]
-    ).exists():
-        return 'A booking for this user already exists.'
-
-    confirmed_count = Booking.objects.filter(
-        event=event,
-        status=Booking.STATUS_CONFIRMED,
-    ).count()
-    if confirmed_count >= event.capacity:
-        return 'This event is already at full capacity.'
-
-    return None
-
-
 class BookingViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         queryset = Booking.objects.select_related(
@@ -86,31 +65,29 @@ class PaymentInitiationView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         event = serializer.validated_data['event']
-        pricing = calculate_booking_pricing(request.user, event)
+        booking = create_pending_booking(request.user, event, booking_source=Booking.SOURCE_ONLINE)
 
-        booking = Booking.objects.create(
-            user=request.user,
-            event=event,
-            status=Booking.STATUS_PENDING,
-            booking_source=Booking.SOURCE_ONLINE,
-            is_student=pricing['is_student'],
-            base_price=pricing['base_price'],
-            discount_amount=pricing['discount_amount'],
-            total_price=pricing['total_price'],
-        )
-
-        if pricing['total_price'] == 0:
+        if booking.total_price == 0:
             payment = create_payment_for_booking(
                 booking,
                 provider=Payment.PROVIDER_FREE,
                 method='FREE',
                 status=Payment.STATUS_SUCCESS,
             )
-            payment, ticket = process_successful_payment(
+            payment, ticket, capacity_error = process_successful_payment(
                 payment,
                 provider_reference=build_payment_reference('FREE'),
                 provider_response={'source': 'free-booking'},
             )
+            if capacity_error:
+                return Response(
+                    {
+                        'detail': capacity_error,
+                        'booking': BookingSerializer(booking, context={'request': request}).data,
+                        'payment': PaymentSerializer(payment).data,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
             return Response(
                 {
                     'message': 'Free booking confirmed successfully.',
@@ -170,11 +147,20 @@ class PaymentVerificationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         if serializer.validated_data['status'] == Payment.STATUS_SUCCESS:
-            payment, _ = process_successful_payment(
+            payment, _, capacity_error = process_successful_payment(
                 payment,
                 provider_reference=serializer.validated_data.get('provider_reference', ''),
                 provider_response=serializer.validated_data.get('provider_response'),
             )
+            if capacity_error:
+                return Response(
+                    {
+                        'detail': capacity_error,
+                        'booking': BookingSerializer(payment.booking, context={'request': request}).data,
+                        'payment': PaymentSerializer(payment).data,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
         else:
             payment = process_failed_payment(
                 payment,
@@ -211,11 +197,19 @@ class PaymentWebhookView(APIView):
         )
 
         if serializer.validated_data['status'] == Payment.STATUS_SUCCESS:
-            payment, _ = process_successful_payment(
+            payment, _, capacity_error = process_successful_payment(
                 payment,
                 provider_reference=serializer.validated_data.get('provider_reference', ''),
                 provider_response=serializer.validated_data.get('provider_response'),
             )
+            if capacity_error:
+                return Response(
+                    {
+                        'status': payment.status,
+                        'detail': capacity_error,
+                    },
+                    status=status.HTTP_200_OK,
+                )
         else:
             payment = process_failed_payment(
                 payment,
@@ -239,35 +233,34 @@ class OfflineBookingView(APIView):
         )
         event = serializer.validated_data['event']
 
-        eligibility_error = validate_booking_eligibility(user, event)
+        eligibility_error = get_booking_validation_error(user, event)
         if eligibility_error:
-            return Response({'detail': eligibility_error}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(eligibility_error, status=status.HTTP_400_BAD_REQUEST)
 
-        pricing = calculate_booking_pricing(user, event)
-        booking = Booking.objects.create(
-            user=user,
-            event=event,
-            status=Booking.STATUS_PENDING,
-            booking_source=Booking.SOURCE_OFFLINE,
-            is_student=pricing['is_student'],
-            base_price=pricing['base_price'],
-            discount_amount=pricing['discount_amount'],
-            total_price=pricing['total_price'],
-        )
+        booking = create_pending_booking(user, event, booking_source=Booking.SOURCE_OFFLINE)
 
-        provider = Payment.PROVIDER_CASH if pricing['total_price'] > 0 else Payment.PROVIDER_FREE
-        method = 'CASH' if pricing['total_price'] > 0 else 'FREE'
+        provider = Payment.PROVIDER_CASH if booking.total_price > 0 else Payment.PROVIDER_FREE
+        method = 'CASH' if booking.total_price > 0 else 'FREE'
         payment = create_payment_for_booking(
             booking,
             provider=provider,
             method=method,
             status=Payment.STATUS_SUCCESS,
         )
-        payment, ticket = process_successful_payment(
+        payment, ticket, capacity_error = process_successful_payment(
             payment,
             provider_reference=build_payment_reference('WALKIN'),
             provider_response={'source': 'offline-booking'},
         )
+        if capacity_error:
+            return Response(
+                {
+                    'detail': capacity_error,
+                    'booking': BookingSerializer(booking, context={'request': request}).data,
+                    'payment': PaymentSerializer(payment).data,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         return Response(
             {

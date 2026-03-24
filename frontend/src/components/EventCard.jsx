@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Tag } from 'lucide-react';
+import { Calendar, MapPin, Tag, Users } from 'lucide-react';
 
 const EventCard = ({ event }) => {
     const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
@@ -46,6 +46,14 @@ const EventCard = ({ event }) => {
                     <div className="flex items-center text-sm text-gray-500">
                         <MapPin className="w-4 h-4 mr-2 text-indigo-500" />
                         <span className="line-clamp-1">{event.location}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500">
+                        <Users className="w-4 h-4 mr-2 text-indigo-500" />
+                        <span>
+                            {event.is_sold_out
+                                ? 'Sold out'
+                                : `${event.remaining_capacity} seat${event.remaining_capacity === 1 ? '' : 's'} left`}
+                        </span>
                     </div>
                 </div>
 

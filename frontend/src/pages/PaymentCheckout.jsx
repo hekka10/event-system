@@ -1,0 +1,194 @@
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, CreditCard, Loader2, ShieldCheck, XCircle } from 'lucide-react';
+
+import bookingService from '../services/bookingService';
+import authService from '../services/authService';
+
+
+function PaymentCheckout() {
+  const { paymentId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = authService.getCurrentUser();
+  const token = user?.access || user?.token || '';
+
+  const [payment, setPayment] = useState(null);
+  const [booking, setBooking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState('');
+  const notice = location.state?.message || '';
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    const fetchPayment = async () => {
+      try {
+        const data = await bookingService.getPayment(paymentId, token);
+        setPayment(data.payment);
+        setBooking(data.booking);
+      } catch (fetchError) {
+        setError(fetchError.message || 'Failed to load checkout details.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPayment();
+  }, [navigate, paymentId, token]);
+
+  const handleVerification = async (status) => {
+    setActionLoading(true);
+    setError('');
+
+    try {
+      const data = await bookingService.verifyPayment(
+        paymentId,
+        {
+          status,
+          provider_reference: `SANDBOX-${paymentId.slice(0, 8).toUpperCase()}`,
+          provider_response: {
+            gateway: 'sandbox',
+            confirmed_by_user: true,
+          },
+        },
+        token
+      );
+
+      setPayment(data.payment);
+      setBooking(data.booking);
+
+      if (status === 'SUCCESS') {
+        navigate('/my-bookings', {
+          state: { message: 'Payment successful. Your booking is confirmed.' },
+        });
+      }
+    } catch (verifyError) {
+      setError(verifyError.message || 'Failed to complete payment.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error && !payment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="bg-white p-8 rounded-2xl border border-gray-100 max-w-md text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Link to="/my-bookings" className="text-indigo-600 font-semibold hover:underline">
+            Go to My Bookings
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isSettled = payment?.status === 'SUCCESS';
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <Link to="/events" className="inline-flex items-center gap-2 text-gray-500 hover:text-indigo-600 mb-6">
+          <ArrowLeft className="w-4 h-4" />
+          Back to events
+        </Link>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-8 border-b border-gray-100 bg-gray-50/70">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-indigo-600 p-3 rounded-2xl text-white">
+                <CreditCard className="w-6 h-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Complete Your Payment</h1>
+                <p className="text-sm text-gray-500">
+                  Sandbox checkout for {booking?.event_details?.title}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-2xl bg-white p-4 border border-gray-100">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Amount</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">${payment?.amount}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-4 border border-gray-100">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Provider</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{payment?.provider}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-4 border border-gray-100">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Status</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{payment?.status}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8">
+            {notice && (
+              <div className="mb-6 bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-2xl">
+                {notice}
+              </div>
+            )}
+
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl">
+                {error}
+              </div>
+            )}
+
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 mb-8">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-indigo-600 mt-0.5" />
+                <div>
+                  <h2 className="font-bold text-gray-900">Sandbox Payment Gateway</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    This checkout is wired end to end for payment initiation, verification, booking confirmation,
+                    QR ticket generation, and email delivery. Replace the sandbox provider with a live gateway by
+                    updating the backend payment service configuration.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                type="button"
+                disabled={actionLoading || isSettled}
+                onClick={() => handleVerification('SUCCESS')}
+                className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
+                {isSettled ? 'Payment Completed' : 'Pay with Sandbox Gateway'}
+              </button>
+
+              <button
+                type="button"
+                disabled={actionLoading || isSettled}
+                onClick={() => handleVerification('FAILED')}
+                className="w-full bg-gray-100 text-gray-700 font-semibold py-4 rounded-2xl hover:bg-gray-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-5 h-5" />
+                Simulate Failed Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+export default PaymentCheckout;

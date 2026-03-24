@@ -1,54 +1,129 @@
-const API_URL = `${import.meta.env.VITE_API_URL}/auth`;
+import { getAuthHeaders, request } from './api';
+
+const STORAGE_KEY = 'user';
+
+const normalizeUser = (data) => {
+  if (!data) {
+    return null;
+  }
+
+  return {
+    ...data,
+    access: data.access || data.token,
+    token: data.access || data.token,
+  };
+};
+
+const storeUser = (user) => {
+  const normalized = normalizeUser(user);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  return normalized;
+};
 
 const register = async (userData) => {
-    const response = await fetch(`${API_URL}/register/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Signup failed');
-    }
-    return data;
+  const data = await request(
+    '/auth/register/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    },
+    'Signup failed'
+  );
+
+  return storeUser(data);
 };
 
 const login = async (userData) => {
-    const response = await fetch(`${API_URL}/login/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-    }
+  const data = await request(
+    '/auth/login/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    },
+    'Login failed'
+  );
 
-    if (data.access) {
-        localStorage.setItem('user', JSON.stringify(data));
-    }
-
-    return data;
+  return storeUser(data);
 };
 
-const logout = () => {
-    localStorage.removeItem('user');
+const loginWithGoogle = async (payload) => {
+  const data = await request(
+    '/auth/google/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    'Google login failed'
+  );
+
+  return storeUser(data);
 };
 
 const getCurrentUser = () => {
-    return JSON.parse(localStorage.getItem('user'));
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? normalizeUser(JSON.parse(stored)) : null;
+  } catch {
+    return null;
+  }
+};
+
+const getAccessToken = () => getCurrentUser()?.access || null;
+
+const isAuthenticated = () => Boolean(getAccessToken());
+
+const isAdmin = (user = getCurrentUser()) => Boolean(user?.is_staff || user?.is_superuser);
+
+const refreshProfile = async (token = getAccessToken()) => {
+  if (!token) {
+    return null;
+  }
+
+  const profile = await request(
+    '/auth/me/',
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch profile'
+  );
+
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
+    return null;
+  }
+
+  return storeUser({
+    ...currentUser,
+    ...profile,
+    access: currentUser.access,
+    refresh: currentUser.refresh,
+  });
+};
+
+const logout = () => {
+  localStorage.removeItem(STORAGE_KEY);
 };
 
 const authService = {
-    register,
-    login,
-    logout,
-    getCurrentUser,
+  register,
+  login,
+  loginWithGoogle,
+  logout,
+  getCurrentUser,
+  getAccessToken,
+  isAuthenticated,
+  isAdmin,
+  refreshProfile,
+  storeUser,
 };
 
 export default authService;
-

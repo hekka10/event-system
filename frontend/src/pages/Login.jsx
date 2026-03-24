@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import { Mail, Lock, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
+import GoogleSignInButton from '../components/GoogleSignInButton';
+
+const hasGoogleAuth = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
 function Login() {
     const [formData, setFormData] = useState({
@@ -11,6 +14,8 @@ function Login() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const location = useLocation();
+    const redirectTo = location.state?.from?.pathname || '/';
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -22,7 +27,7 @@ function Login() {
         setError('');
         try {
             await authService.login(formData);
-            navigate('/');
+            navigate(redirectTo, { replace: true });
         } catch (err) {
             setError(err.message || 'Login failed. Please check your credentials.');
         } finally {
@@ -87,6 +92,28 @@ function Login() {
                     </form>
 
                     <div className="mt-10 text-center">
+                        {hasGoogleAuth && (
+                            <>
+                                <div className="mb-6">
+                                    <GoogleSignInButton
+                                        onSuccess={() => navigate(redirectTo, { replace: true })}
+                                        onError={(googleError) =>
+                                            setError(googleError.message || 'Google login is not available right now.')
+                                        }
+                                    />
+                                </div>
+
+                                <div className="relative mb-6">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-gray-100" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] text-gray-400">
+                                        <span className="bg-white px-3">or continue with email</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
                         <p className="text-gray-500 font-medium">
                             Don't have an account?{' '}
                             <Link to="/signup" className="text-indigo-600 font-bold hover:text-indigo-700 underline underline-offset-4">

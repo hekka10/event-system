@@ -79,6 +79,7 @@ function EventForm() {
     const isEditMode = !!id;
     const navigate = useNavigate();
     const user = authService.getCurrentUser();
+    const token = user?.access || user?.token || '';
 
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -103,50 +104,49 @@ function EventForm() {
     const [imagePreview, setImagePreview] = useState(null);
 
     useEffect(() => {
-        if (!user) {
+        if (!token) {
             navigate('/login');
             return;
         }
-        fetchCategories();
-        if (isEditMode) {
-            fetchEventDetails();
-        }
-    }, [id]);
-
-    const fetchCategories = async () => {
-        try {
-            const data = await eventService.getCategories();
-            setCategories(data);
-        } catch (err) {
-            console.error('Error fetching categories:', err);
-        }
-    };
-
-    const fetchEventDetails = async () => {
-        try {
-            const data = await eventService.getEventById(id);
-            setFormData({
-                title: data.title,
-                description: data.description,
-                date: getLocalDateTimeValue(data.date),
-                location: data.location,
-                parking_info: data.parking_info || '',
-                parking_map_url: data.parking_map_url || '',
-                latitude: data.latitude || '',
-                longitude: data.longitude || '',
-                category: data.category || '',
-                price: data.price,
-                capacity: data.capacity,
-            });
-            if (data.image) {
-                setImagePreview(data.image);
+        const loadFormData = async () => {
+            try {
+                const categoriesData = await eventService.getCategories();
+                setCategories(categoriesData);
+            } catch (categoryError) {
+                console.error('Error fetching categories:', categoryError);
             }
-        } catch (err) {
-            setError('Failed to fetch event details.');
-        } finally {
-            setInitialLoading(false);
-        }
-    };
+
+            if (!isEditMode) {
+                return;
+            }
+
+            try {
+                const data = await eventService.getEventById(id, token);
+                setFormData({
+                    title: data.title,
+                    description: data.description,
+                    date: getLocalDateTimeValue(data.date),
+                    location: data.location,
+                    parking_info: data.parking_info || '',
+                    parking_map_url: data.parking_map_url || '',
+                    latitude: data.latitude || '',
+                    longitude: data.longitude || '',
+                    category: data.category || '',
+                    price: data.price,
+                    capacity: data.capacity,
+                });
+                if (data.image) {
+                    setImagePreview(data.image);
+                }
+            } catch {
+                setError('Failed to fetch event details.');
+            } finally {
+                setInitialLoading(false);
+            }
+        };
+
+        loadFormData();
+    }, [id, isEditMode, navigate, token]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -200,7 +200,7 @@ function EventForm() {
                     try {
                         const dateObj = new Date(formData.date);
                         data.append(key, dateObj.toISOString());
-                    } catch (e) {
+                    } catch {
                         data.append(key, formData[key]);
                     }
                 } else {
@@ -214,12 +214,18 @@ function EventForm() {
 
         try {
             if (isEditMode) {
-                await eventService.updateEvent(id, data, user.access || user.token);
+                const updatedEvent = await eventService.updateEvent(id, data, token);
+                navigate(`/events/${updatedEvent.id}`, {
+                    replace: true,
+                    state: { message: 'Event updated successfully.' },
+                });
             } else {
-                await eventService.createEvent(data, user.access || user.token);
-                alert('Event created successfully! It is now pending admin approval.');
+                const createdEvent = await eventService.createEvent(data, token);
+                navigate(`/events/${createdEvent.id}`, {
+                    replace: true,
+                    state: { message: 'Event created successfully. It is pending admin approval.' },
+                });
             }
-            navigate('/events');
         } catch (err) {
             setError(err.message || 'Something went wrong.');
         } finally {
@@ -324,6 +330,11 @@ function EventForm() {
                                     ))}
                                 </select>
                                 {fieldErrors.category && <p className="text-sm text-red-600">{fieldErrors.category}</p>}
+                                {categories.length === 0 && (
+                                    <p className="text-sm text-amber-600">
+                                        No categories are available yet. Ask an admin to create one before publishing an event.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">

@@ -1,8 +1,10 @@
 from io import BytesIO
+from decimal import Decimal
 import uuid
 
 import qrcode
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import models
 from django.utils import timezone
@@ -45,8 +47,8 @@ class Booking(models.Model):
         default=SOURCE_ONLINE,
     )
     is_student = models.BooleanField(default=False)
-    base_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -54,9 +56,53 @@ class Booking(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(base_price__gte=0),
+                name='booking_base_price_gte_zero',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(discount_amount__gte=0),
+                name='booking_discount_amount_gte_zero',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(total_price__gte=0),
+                name='booking_total_price_gte_zero',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(discount_amount__lte=models.F('base_price')),
+                name='booking_discount_not_above_base_price',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {self.event.title}"
+
+    def clean(self):
+        errors = {}
+
+        if self.base_price is not None and self.base_price < 0:
+            errors['base_price'] = 'Base price cannot be negative.'
+
+        if self.discount_amount is not None and self.discount_amount < 0:
+            errors['discount_amount'] = 'Discount amount cannot be negative.'
+
+        if (
+            self.base_price is not None
+            and self.discount_amount is not None
+            and self.discount_amount > self.base_price
+        ):
+            errors['discount_amount'] = 'Discount amount cannot exceed base price.'
+
+        if self.total_price is not None and self.total_price < 0:
+            errors['total_price'] = 'Total price cannot be negative.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def confirm(self):
         """
@@ -132,9 +178,23 @@ class Payment(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gte=0),
+                name='payment_amount_gte_zero',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.external_reference} - {self.status}"
+
+    def clean(self):
+        if self.amount is not None and self.amount < 0:
+            raise ValidationError({'amount': 'Payment amount cannot be negative.'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class Ticket(models.Model):
@@ -155,9 +215,16 @@ class Ticket(models.Model):
     class Meta:
         ordering = ['-booking__created_at']
 
+    @classmethod
+    def generate_unique_ticket_code(cls):
+        while True:
+            candidate = f"TICKET-{uuid.uuid4().hex[:12].upper()}"
+            if not cls.objects.filter(ticket_code=candidate).exists():
+                return candidate
+
     def save(self, *args, **kwargs):
         if not self.ticket_code:
-            self.ticket_code = f"TICKET-{uuid.uuid4().hex[:12].upper()}"
+            self.ticket_code = self.generate_unique_ticket_code()
 
         if not self.qr_code:
             self.generate_qr()

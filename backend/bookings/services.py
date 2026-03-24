@@ -7,6 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils import timezone
 
+from events.models import Event
 from users.models import StudentVerification
 
 from .models import Booking, Payment
@@ -36,6 +37,32 @@ def get_verified_student_record(user):
     ).first()
 
 
+def get_booking_validation_error(user, event, booking_id_to_ignore=None):
+    if event.date <= timezone.now():
+        return {'event': 'Cannot book an event that is in the past.'}
+
+    if not event.is_approved:
+        return {'event': 'Cannot book an unapproved event.'}
+
+    existing_booking = Booking.objects.filter(user=user, event=event).exclude(
+        status__in=[Booking.STATUS_CANCELLED, Booking.STATUS_FAILED]
+    )
+    if booking_id_to_ignore:
+        existing_booking = existing_booking.exclude(pk=booking_id_to_ignore)
+
+    if existing_booking.exists():
+        return {'non_field_errors': 'You have already booked this event.'}
+
+    confirmed_bookings = Booking.objects.filter(
+        event=event,
+        status=Booking.STATUS_CONFIRMED,
+    ).count()
+    if confirmed_bookings >= event.capacity:
+        return {'event': 'This event is already at full capacity.'}
+
+    return None
+
+
 def calculate_booking_pricing(user, event):
     base_price = quantize_amount(event.price or 0)
     verification = get_verified_student_record(user)
@@ -50,6 +77,28 @@ def calculate_booking_pricing(user, event):
         'is_student': is_student,
         'student_verification': verification,
     }
+
+
+def create_pending_booking(user, event, booking_source=Booking.SOURCE_ONLINE):
+    pricing = calculate_booking_pricing(user, event)
+    booking = Booking.objects.create(
+        user=user,
+        event=event,
+        status=Booking.STATUS_PENDING,
+        booking_source=booking_source,
+        is_student=pricing['is_student'],
+        base_price=pricing['base_price'],
+        discount_amount=pricing['discount_amount'],
+        total_price=pricing['total_price'],
+    )
+    return booking
+
+
+def build_capacity_failure_response(provider_response=None):
+    payload = dict(provider_response or {})
+    payload['reason'] = 'event_full'
+    payload['message'] = 'This event is already at full capacity.'
+    return payload
 
 
 def build_payment_reference(prefix='PAY'):
@@ -83,6 +132,36 @@ def create_payment_for_booking(booking, provider=Payment.PROVIDER_MOCK, method='
 @transaction.atomic
 def process_successful_payment(payment, provider_reference='', provider_response=None):
     locked_payment = Payment.objects.select_for_update().select_related('booking').get(pk=payment.pk)
+    booking = locked_payment.booking
+    event = Event.objects.select_for_update().get(pk=booking.event_id)
+
+    confirmed_count = Booking.objects.filter(
+        event_id=event.id,
+        status=Booking.STATUS_CONFIRMED,
+    ).exclude(pk=booking.pk).count()
+
+    if confirmed_count >= event.capacity and booking.status != Booking.STATUS_CONFIRMED:
+        if locked_payment.status != Payment.STATUS_FAILED:
+            locked_payment.status = Payment.STATUS_FAILED
+            locked_payment.provider_reference = (
+                provider_reference
+                or locked_payment.provider_reference
+                or locked_payment.external_reference
+            )
+            locked_payment.provider_response = build_capacity_failure_response(provider_response)
+            locked_payment.verified_at = timezone.now()
+            locked_payment.save(
+                update_fields=[
+                    'status',
+                    'provider_reference',
+                    'provider_response',
+                    'verified_at',
+                    'updated_at',
+                ]
+            )
+
+        booking.mark_failed()
+        return locked_payment, None, 'This event is already at full capacity.'
 
     if locked_payment.status != Payment.STATUS_SUCCESS:
         locked_payment.status = Payment.STATUS_SUCCESS
@@ -101,8 +180,8 @@ def process_successful_payment(payment, provider_reference='', provider_response
             ]
         )
 
-    ticket = locked_payment.booking.confirm()
-    return locked_payment, ticket
+    ticket = booking.confirm()
+    return locked_payment, ticket, None
 
 
 @transaction.atomic
