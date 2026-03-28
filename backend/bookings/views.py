@@ -12,6 +12,7 @@ from .serializers import (
     OfflineBookingSerializer,
     PaymentInitiationSerializer,
     PaymentSerializer,
+    PaymentVerificationRequestSerializer,
     PaymentVerificationSerializer,
     PaymentWebhookSerializer,
     TicketScanSerializer,
@@ -25,6 +26,45 @@ from .services import (
     process_failed_payment,
     process_successful_payment,
 )
+
+
+def get_payment_with_relations():
+    return Payment.objects.select_related('booking', 'booking__event', 'user')
+
+
+def verify_payment_submission(request, payment, validated_data):
+    if validated_data['status'] == Payment.STATUS_SUCCESS:
+        payment, ticket, capacity_error = process_successful_payment(
+            payment,
+            provider_reference=validated_data.get('provider_reference', ''),
+            provider_response=validated_data.get('provider_response'),
+        )
+        if capacity_error:
+            return Response(
+                {
+                    'detail': capacity_error,
+                    'booking': BookingSerializer(payment.booking, context={'request': request}).data,
+                    'payment': PaymentSerializer(payment).data,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+    else:
+        payment = process_failed_payment(
+            payment,
+            provider_reference=validated_data.get('provider_reference', ''),
+            provider_response=validated_data.get('provider_response'),
+        )
+        ticket = None
+
+    return Response(
+        {
+            'message': 'Payment verification completed.',
+            'next_action': 'BOOKING_CONFIRMED' if payment.status == Payment.STATUS_SUCCESS else 'PAYMENT_FAILED',
+            'booking': BookingSerializer(payment.booking, context={'request': request}).data,
+            'payment': PaymentSerializer(payment).data,
+            'ticket_code': ticket.ticket_code if ticket else None,
+        }
+    )
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -116,7 +156,7 @@ class PaymentDetailView(APIView):
 
     def get(self, request, payment_id):
         payment = get_object_or_404(
-            Payment.objects.select_related('booking', 'booking__event', 'user'),
+            get_payment_with_relations(),
             pk=payment_id,
         )
 
@@ -136,7 +176,7 @@ class PaymentVerificationView(APIView):
 
     def post(self, request, payment_id):
         payment = get_object_or_404(
-            Payment.objects.select_related('booking', 'booking__event', 'user'),
+            get_payment_with_relations(),
             pk=payment_id,
         )
 
@@ -145,36 +185,33 @@ class PaymentVerificationView(APIView):
 
         serializer = PaymentVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        return verify_payment_submission(request, payment, serializer.validated_data)
 
-        if serializer.validated_data['status'] == Payment.STATUS_SUCCESS:
-            payment, _, capacity_error = process_successful_payment(
-                payment,
-                provider_reference=serializer.validated_data.get('provider_reference', ''),
-                provider_response=serializer.validated_data.get('provider_response'),
-            )
-            if capacity_error:
-                return Response(
-                    {
-                        'detail': capacity_error,
-                        'booking': BookingSerializer(payment.booking, context={'request': request}).data,
-                        'payment': PaymentSerializer(payment).data,
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
+class PaymentVerificationRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = PaymentVerificationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        payment_filters = {}
+        payment_id = serializer.validated_data.get('payment_id')
+        transaction_ref = serializer.validated_data.get('transaction_ref')
+
+        if payment_id:
+            payment_filters['pk'] = payment_id
         else:
-            payment = process_failed_payment(
-                payment,
-                provider_reference=serializer.validated_data.get('provider_reference', ''),
-                provider_response=serializer.validated_data.get('provider_response'),
+            payment_filters['external_reference'] = transaction_ref
+
+        payment = get_object_or_404(get_payment_with_relations(), **payment_filters)
+
+        if not (request.user.is_staff or payment.user_id == request.user.id):
+            return Response(
+                {'detail': 'You do not have permission to verify this payment.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        return Response(
-            {
-                'message': 'Payment verification completed.',
-                'booking': BookingSerializer(payment.booking, context={'request': request}).data,
-                'payment': PaymentSerializer(payment).data,
-            }
-        )
+        return verify_payment_submission(request, payment, serializer.validated_data)
 
 
 class PaymentWebhookView(APIView):

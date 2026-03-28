@@ -2,7 +2,7 @@ import { getAuthHeaders, request } from './api';
 
 const getMyVerification = async (token) => {
   return request(
-    '/auth/student-verifications/',
+    '/student/status/',
     {
       headers: getAuthHeaders(token),
     },
@@ -12,7 +12,7 @@ const getMyVerification = async (token) => {
 
 const submitVerification = async (formData, token) => {
   return request(
-    '/auth/student-verifications/',
+    '/student/submit/',
     {
       method: 'POST',
       headers: getAuthHeaders(token),
@@ -34,13 +34,16 @@ const getPendingVerifications = async (token, status = 'PENDING') => {
 
 const reviewVerification = async (id, payload, token) => {
   return request(
-    `/auth/student-verifications/${id}/review/`,
+    '/student/approve/',
     {
       method: 'POST',
       headers: getAuthHeaders(token, {
         'Content-Type': 'application/json',
       }),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        verification_id: id,
+        ...payload,
+      }),
     },
     'Failed to review student verification'
   );

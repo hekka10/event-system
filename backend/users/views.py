@@ -11,6 +11,7 @@ from .models import StudentVerification
 from .serializers import (
     GoogleOAuthSerializer,
     RegisterSerializer,
+    StudentVerificationApproveRequestSerializer,
     StudentVerificationReviewSerializer,
     StudentVerificationSerializer,
     UserSerializer,
@@ -32,6 +33,34 @@ def _build_unique_username(seed):
         suffix += 1
 
     return candidate
+
+
+def _serialize_student_verification(verification, request):
+    serializer = StudentVerificationSerializer(verification, context={'request': request})
+    return serializer.data
+
+
+def _apply_student_verification_review(verification, validated_data, reviewer):
+    verification.status = validated_data['status']
+    verification.rejection_reason = validated_data.get('rejection_reason', '').strip()
+    verification.approved_by = reviewer
+    verification.reviewed_at = timezone.now()
+    verification.verified_at = (
+        verification.reviewed_at
+        if verification.status == StudentVerification.STATUS_APPROVED
+        else None
+    )
+    verification.save(
+        update_fields=[
+            'status',
+            'rejection_reason',
+            'approved_by',
+            'verified_at',
+            'reviewed_at',
+            'updated_at',
+        ]
+    )
+    return verification
 
 
 class RegisterView(generics.CreateAPIView):
@@ -107,8 +136,7 @@ class StudentVerificationSubmissionView(APIView):
         if verification is None:
             return Response(None, status=status.HTTP_200_OK)
 
-        serializer = StudentVerificationSerializer(verification, context={'request': request})
-        return Response(serializer.data)
+        return Response(_serialize_student_verification(verification, request))
 
     def post(self, request):
         serializer = StudentVerificationSerializer(
@@ -117,11 +145,37 @@ class StudentVerificationSubmissionView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         verification = serializer.save()
-        output_serializer = StudentVerificationSerializer(
-            verification,
+        return Response(
+            _serialize_student_verification(verification, request),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StudentVerificationStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        verification = StudentVerification.objects.filter(user=request.user).first()
+        if verification is None:
+            return Response(None, status=status.HTTP_200_OK)
+
+        return Response(_serialize_student_verification(verification, request))
+
+
+class StudentVerificationSubmitView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = StudentVerificationSerializer(
+            data=request.data,
             context={'request': request},
         )
-        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+        serializer.is_valid(raise_exception=True)
+        verification = serializer.save()
+        return Response(
+            _serialize_student_verification(verification, request),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class StudentVerificationAdminListView(generics.ListAPIView):
@@ -143,23 +197,30 @@ class StudentVerificationReviewView(APIView):
         verification = generics.get_object_or_404(StudentVerification, pk=pk)
         serializer = StudentVerificationReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        verification.status = serializer.validated_data['status']
-        verification.rejection_reason = serializer.validated_data.get('rejection_reason', '').strip()
-        verification.approved_by = request.user
-        verification.reviewed_at = timezone.now()
-        verification.save(
-            update_fields=[
-                'status',
-                'rejection_reason',
-                'approved_by',
-                'reviewed_at',
-                'updated_at',
-            ]
-        )
-
-        output_serializer = StudentVerificationSerializer(
+        verification = _apply_student_verification_review(
             verification,
-            context={'request': request},
+            serializer.validated_data,
+            request.user,
         )
-        return Response(output_serializer.data, status=status.HTTP_200_OK)
+
+        return Response(_serialize_student_verification(verification, request), status=status.HTTP_200_OK)
+
+
+class StudentVerificationApproveView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = StudentVerificationApproveRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        verification = generics.get_object_or_404(
+            StudentVerification,
+            pk=serializer.validated_data['verification_id'],
+        )
+        verification = _apply_student_verification_review(
+            verification,
+            serializer.validated_data,
+            request.user,
+        )
+
+        return Response(_serialize_student_verification(verification, request), status=status.HTTP_200_OK)

@@ -36,7 +36,7 @@ const getBookingById = async (id, token) => {
 
 const initiatePayment = async (payload, token) => {
   return request(
-    '/bookings/initiate-payment/',
+    '/payments/initiate/',
     {
       method: 'POST',
       headers: getAuthHeaders(token, {
@@ -50,7 +50,7 @@ const initiatePayment = async (payload, token) => {
 
 const getPayment = async (paymentId, token) => {
   return request(
-    `/bookings/payments/${paymentId}/`,
+    `/payments/${paymentId}/`,
     {
       headers: getAuthHeaders(token),
     },
@@ -60,13 +60,16 @@ const getPayment = async (paymentId, token) => {
 
 const verifyPayment = async (paymentId, payload, token) => {
   return request(
-    `/bookings/payments/${paymentId}/verify/`,
+    '/payments/verify/',
     {
       method: 'POST',
       headers: getAuthHeaders(token, {
         'Content-Type': 'application/json',
       }),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        payment_id: paymentId,
+        ...payload,
+      }),
     },
     'Failed to verify payment'
   );

@@ -76,6 +76,11 @@ class GoogleOAuthSerializer(serializers.Serializer):
 class StudentVerificationSerializer(serializers.ModelSerializer):
     user_email = serializers.ReadOnlyField(source='user.email')
     reviewed_by_email = serializers.ReadOnlyField(source='approved_by.email')
+    student_id_image = serializers.FileField(
+        source='supporting_document',
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = StudentVerification
@@ -85,6 +90,7 @@ class StudentVerificationSerializer(serializers.ModelSerializer):
             'user_email',
             'student_email',
             'student_id',
+            'student_id_image',
             'institution_name',
             'supporting_document',
             'notes',
@@ -92,6 +98,7 @@ class StudentVerificationSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'approved_by',
             'reviewed_by_email',
+            'verified_at',
             'reviewed_at',
             'created_at',
             'updated_at',
@@ -101,6 +108,7 @@ class StudentVerificationSerializer(serializers.ModelSerializer):
             'status',
             'rejection_reason',
             'approved_by',
+            'verified_at',
             'reviewed_at',
             'created_at',
             'updated_at',
@@ -130,6 +138,7 @@ class StudentVerificationSerializer(serializers.ModelSerializer):
                 'status': StudentVerification.STATUS_PENDING,
                 'rejection_reason': '',
                 'approved_by': None,
+                'verified_at': None,
                 'reviewed_at': None,
             },
         )
@@ -154,3 +163,7 @@ class StudentVerificationReviewSerializer(serializers.Serializer):
                 {'rejection_reason': 'A rejection reason is required when rejecting.'}
             )
         return attrs
+
+
+class StudentVerificationApproveRequestSerializer(StudentVerificationReviewSerializer):
+    verification_id = serializers.UUIDField()

@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
@@ -252,6 +253,22 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(Booking.objects.first().status, Booking.STATUS_PENDING)
         self.assertEqual(Payment.objects.first().status, Payment.STATUS_INITIATED)
+        booking = Booking.objects.first()
+        self.assertFalse(Ticket.objects.filter(booking=booking).exists())
+
+    def test_payments_initiate_endpoint_alias_creates_pending_payment(self):
+        self.client.force_authenticate(user=self.attendee)
+
+        response = self.client.post(
+            reverse('payments_initiate'),
+            {'event': str(self.event.id)},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['next_action'], 'COMPLETE_PAYMENT')
+        self.assertIn('transaction_ref', response.data['payment'])
+        self.assertEqual(response.data['payment']['transaction_ref'], response.data['payment']['external_reference'])
 
     def test_payment_verification_confirms_booking_and_generates_ticket(self):
         booking = Booking.objects.create(
@@ -290,14 +307,86 @@ class BookingWorkflowTests(APITestCase):
         payment.refresh_from_db()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['next_action'], 'BOOKING_CONFIRMED')
         self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
         self.assertEqual(payment.status, Payment.STATUS_SUCCESS)
         ticket = Ticket.objects.get(booking=booking)
         self.assertTrue(ticket.ticket_code.startswith('TICKET-'))
         self.assertTrue(bool(ticket.qr_code))
         self.assertIn('qr_code_url', response.data['booking']['ticket'])
+        self.assertEqual(response.data['ticket_code'], ticket.ticket_code)
         self.assertEqual(len(mail.outbox), 1)
         self.assertTrue(mail.outbox[0].attachments)
+
+    def test_booking_confirm_raises_without_successful_payment(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_MOCK,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            external_reference='PAY-NOT-SUCCESSFUL',
+            checkout_url='http://localhost:5173/checkout/test',
+        )
+
+        with self.assertRaises(ValidationError):
+            booking.confirm()
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.STATUS_PENDING)
+        self.assertFalse(Ticket.objects.filter(booking=booking).exists())
+
+    def test_payments_verify_endpoint_accepts_transaction_reference(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_MOCK,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            external_reference='PAY-VERIFY-BY-REF',
+            checkout_url='http://localhost:5173/checkout/test',
+        )
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('payments_verify'),
+            {
+                'transaction_ref': payment.external_reference,
+                'status': Payment.STATUS_SUCCESS,
+                'provider_reference': 'SANDBOX-REF-123',
+            },
+            format='json',
+        )
+
+        booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
+        self.assertEqual(payment.status, Payment.STATUS_SUCCESS)
+        self.assertEqual(response.data['payment']['transaction_ref'], payment.external_reference)
 
     def test_confirmed_bookings_receive_unique_ticket_codes(self):
         first_booking = Booking.objects.create(

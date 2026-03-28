@@ -25,8 +25,10 @@ from .views import AdminDashboardStats
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("users.urls")),
+    path("api/student/", include("users.student_urls")),
     path("api/events/", include("events.urls")),
     path("api/bookings/", include("bookings.urls")),
+    path("api/payments/", include("bookings.payment_urls")),
     path("api/dashboard/stats/", AdminDashboardStats.as_view(), name='admin_stats'),
 ]
 
@@ -35,4 +37,3 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-

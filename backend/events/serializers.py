@@ -1,11 +1,16 @@
-from rest_framework import serializers
+from decimal import Decimal
+
 from django.utils import timezone
+from rest_framework import serializers
+
 from .models import Event, Category
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
+
 
 class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.ReadOnlyField(source='category.name')
@@ -13,6 +18,10 @@ class EventSerializer(serializers.ModelSerializer):
     confirmed_booking_count = serializers.SerializerMethodField()
     remaining_capacity = serializers.SerializerMethodField()
     is_sold_out = serializers.SerializerMethodField()
+    student_discount_percent = serializers.SerializerMethodField()
+    viewer_has_student_discount = serializers.SerializerMethodField()
+    viewer_discount_amount = serializers.SerializerMethodField()
+    viewer_total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -22,6 +31,8 @@ class EventSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'price', 'capacity',
             'image', 'organizer', 'organizer_email', 'is_approved',
             'confirmed_booking_count', 'remaining_capacity', 'is_sold_out',
+            'student_discount_percent', 'viewer_has_student_discount',
+            'viewer_discount_amount', 'viewer_total_price',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['organizer', 'is_approved', 'created_at', 'updated_at']
@@ -81,3 +92,34 @@ class EventSerializer(serializers.ModelSerializer):
 
     def get_is_sold_out(self, obj):
         return self.get_remaining_capacity(obj) <= 0
+
+    def _get_viewer_pricing(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return {
+                'is_student': False,
+                'discount_amount': Decimal('0.00'),
+                'total_price': obj.price,
+            }
+
+        from bookings.services import calculate_booking_pricing
+
+        return calculate_booking_pricing(user, obj)
+
+    def get_student_discount_percent(self, obj):
+        from bookings.services import get_student_discount_rate
+
+        return int(get_student_discount_rate() * 100)
+
+    def get_viewer_has_student_discount(self, obj):
+        pricing = self._get_viewer_pricing(obj)
+        return pricing['is_student']
+
+    def get_viewer_discount_amount(self, obj):
+        pricing = self._get_viewer_pricing(obj)
+        return pricing['discount_amount']
+
+    def get_viewer_total_price(self, obj):
+        pricing = self._get_viewer_pricing(obj)
+        return pricing['total_price']

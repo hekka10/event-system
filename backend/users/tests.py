@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -154,3 +155,89 @@ class UserFeatureTests(APITestCase):
         self.assertTrue(payment_response.data['booking']['is_student'])
         self.assertEqual(Decimal(payment_response.data['booking']['discount_amount']), Decimal('20.00'))
         self.assertEqual(Decimal(payment_response.data['booking']['total_price']), Decimal('80.00'))
+
+    def test_pending_student_verification_does_not_apply_discount(self):
+        StudentVerification.objects.create(
+            user=self.user,
+            student_email='student@college.edu',
+            student_id='STU-PENDING',
+            institution_name='Campus College',
+            status=StudentVerification.STATUS_PENDING,
+        )
+
+        self.client.force_authenticate(user=self.user)
+        payment_response = self.client.post(
+            reverse('payments_initiate'),
+            {'event': str(self.event.id)},
+            format='json',
+        )
+
+        self.assertEqual(payment_response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(payment_response.data['booking']['is_student'])
+        self.assertEqual(Decimal(payment_response.data['booking']['discount_amount']), Decimal('0.00'))
+        self.assertEqual(Decimal(payment_response.data['booking']['total_price']), Decimal('100.00'))
+
+    def test_rejected_student_verification_does_not_apply_discount(self):
+        StudentVerification.objects.create(
+            user=self.user,
+            student_email='student@college.edu',
+            student_id='STU-REJECTED',
+            institution_name='Campus College',
+            status=StudentVerification.STATUS_REJECTED,
+            rejection_reason='Document mismatch',
+        )
+
+        self.client.force_authenticate(user=self.user)
+        payment_response = self.client.post(
+            reverse('payments_initiate'),
+            {'event': str(self.event.id)},
+            format='json',
+        )
+
+        self.assertEqual(payment_response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(payment_response.data['booking']['is_student'])
+        self.assertEqual(Decimal(payment_response.data['booking']['discount_amount']), Decimal('0.00'))
+        self.assertEqual(Decimal(payment_response.data['booking']['total_price']), Decimal('100.00'))
+
+    def test_student_alias_routes_submit_status_and_approve_flow(self):
+        proof = SimpleUploadedFile(
+            'student-id.png',
+            b'fake-image-content',
+            content_type='image/png',
+        )
+
+        self.client.force_authenticate(user=self.user)
+        submission_response = self.client.post(
+            reverse('student_submit'),
+            {
+                'student_email': 'student@college.edu',
+                'student_id': 'STU-002',
+                'student_id_image': proof,
+                'institution_name': 'Campus College',
+                'notes': 'Updated card upload.',
+            },
+            format='multipart',
+        )
+
+        self.assertEqual(submission_response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('student_id_image', submission_response.data)
+        self.assertIsNone(submission_response.data['verified_at'])
+        verification_id = submission_response.data['id']
+
+        status_response = self.client.get(reverse('student_status'))
+        self.assertEqual(status_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(status_response.data['student_id'], 'STU-002')
+
+        self.client.force_authenticate(user=self.admin)
+        approval_response = self.client.post(
+            reverse('student_approve'),
+            {
+                'verification_id': verification_id,
+                'status': StudentVerification.STATUS_APPROVED,
+            },
+            format='json',
+        )
+
+        self.assertEqual(approval_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(approval_response.data['status'], StudentVerification.STATUS_APPROVED)
+        self.assertIsNotNone(approval_response.data['verified_at'])

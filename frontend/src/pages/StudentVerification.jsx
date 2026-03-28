@@ -11,6 +11,20 @@ const statusStyles = {
   REJECTED: 'bg-red-100 text-red-700',
 };
 
+const formatDateTime = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 
 function StudentVerification() {
   const user = authService.getCurrentUser();
@@ -70,7 +84,7 @@ function StudentVerification() {
       payload.append(key, value);
     });
     if (document) {
-      payload.append('supporting_document', document);
+      payload.append('student_id_image', document);
     }
 
     try {
@@ -111,11 +125,18 @@ function StudentVerification() {
             </div>
 
             {verification && (
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-gray-100">
-                <ShieldCheck className="w-4 h-4" />
-                <span className={`px-2 py-1 rounded-full ${statusStyles[verification.status] || 'bg-gray-100 text-gray-700'}`}>
-                  {verification.status}
-                </span>
+              <div>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-gray-100">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className={`px-2 py-1 rounded-full ${statusStyles[verification.status] || 'bg-gray-100 text-gray-700'}`}>
+                    {verification.status}
+                  </span>
+                </div>
+                {verification.verified_at && (
+                  <p className="mt-3 text-sm text-emerald-700 font-medium">
+                    Verified on {formatDateTime(verification.verified_at)}
+                  </p>
+                )}
               </div>
             )}
           </div>

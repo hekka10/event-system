@@ -34,6 +34,8 @@ const formatDateTime = (value) => {
     });
 };
 
+const formatPrice = (value) => `$${Number(value || 0).toFixed(2)}`;
+
 const getStatusMeta = (booking) => {
     if (booking.status === 'CONFIRMED') {
         return {
@@ -118,13 +120,6 @@ function MyBookings() {
         return booking.status === statusFilter;
     });
 
-    const summary = {
-        total: bookings.length,
-        confirmed: bookings.filter((booking) => booking.status === 'CONFIRMED').length,
-        pending: bookings.filter((booking) => booking.status === 'PENDING').length,
-        checkedIn: bookings.filter((booking) => booking.ticket?.is_scanned).length,
-    };
-
     if (loading) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -166,25 +161,6 @@ function MyBookings() {
 
                 {bookings.length > 0 && (
                     <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Total Bookings</p>
-                                <p className="mt-3 text-3xl font-extrabold text-gray-900">{summary.total}</p>
-                            </div>
-                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Confirmed</p>
-                                <p className="mt-3 text-3xl font-extrabold text-emerald-600">{summary.confirmed}</p>
-                            </div>
-                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Pending</p>
-                                <p className="mt-3 text-3xl font-extrabold text-amber-500">{summary.pending}</p>
-                            </div>
-                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Checked In</p>
-                                <p className="mt-3 text-3xl font-extrabold text-indigo-600">{summary.checkedIn}</p>
-                            </div>
-                        </div>
-
                         <div className="mb-8 flex flex-wrap gap-3">
                             {STATUS_FILTERS.map((filterValue) => (
                                 <button
@@ -234,7 +210,7 @@ function MyBookings() {
                                             <Link to={`/events/${booking.event}`} className="text-xl font-bold text-gray-900 hover:text-indigo-600 transition-colors">
                                                 {booking.event_details.title}
                                             </Link>
-                                            <span className="text-lg font-bold text-indigo-600">${booking.total_price}</span>
+                                            <span className="text-lg font-bold text-indigo-600">{formatPrice(booking.total_price)}</span>
                                         </div>
 
                                         <p className="text-sm text-gray-500 mb-4">{statusMeta.description}</p>
@@ -273,7 +249,7 @@ function MyBookings() {
 
                                         {booking.discount_amount > 0 && (
                                             <p className="text-sm text-emerald-600 font-medium mb-4">
-                                                Saved ${booking.discount_amount} with verified student pricing.
+                                                Saved {formatPrice(booking.discount_amount)} with verified student pricing.
                                             </p>
                                         )}
 
@@ -293,6 +269,16 @@ function MyBookings() {
                                             <div className="rounded-xl bg-gray-50 px-4 py-3">
                                                 <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Ticket Code</p>
                                                 <p>{booking.ticket?.ticket_code || 'Generated after confirmation'}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Base Price</p>
+                                                <p>{formatPrice(booking.base_price)}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-gray-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-wide text-gray-400 font-bold mb-1">Discount</p>
+                                                <p className={booking.discount_amount > 0 ? 'text-emerald-600 font-semibold' : ''}>
+                                                    -{formatPrice(booking.discount_amount)}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -323,7 +309,7 @@ function MyBookings() {
                                                     className="flex items-center gap-2 text-sm font-semibold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors"
                                                 >
                                                     <Clock3 className="w-4 h-4" />
-                                                    Complete Payment
+                                                    Pay Now
                                                 </Link>
                                             )}
                                             {booking.status === 'FAILED' && (

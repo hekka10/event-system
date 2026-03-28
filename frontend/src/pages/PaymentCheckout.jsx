@@ -19,6 +19,7 @@ function PaymentCheckout() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const notice = location.state?.message || '';
+  const formatPrice = (value) => `$${Number(value || 0).toFixed(2)}`;
 
   useEffect(() => {
     if (!token) {
@@ -122,7 +123,7 @@ function PaymentCheckout() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
                 <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Amount</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">${payment?.amount}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{formatPrice(payment?.amount)}</p>
               </div>
               <div className="rounded-2xl bg-white p-4 border border-gray-100">
                 <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Provider</p>
@@ -133,6 +134,13 @@ function PaymentCheckout() {
                 <p className="text-lg font-bold text-gray-900 mt-1">{payment?.status}</p>
               </div>
             </div>
+
+            {payment?.transaction_ref && (
+              <div className="mt-4 rounded-2xl bg-white p-4 border border-gray-100">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Transaction Ref</p>
+                <p className="mt-1 font-mono text-sm font-semibold text-gray-900">{payment.transaction_ref}</p>
+              </div>
+            )}
           </div>
 
           <div className="p-8">
@@ -162,6 +170,31 @@ function PaymentCheckout() {
               </div>
             </div>
 
+            {booking && (
+              <div className="mb-8 rounded-2xl border border-gray-100 bg-gray-50 p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Price Breakdown</h2>
+                {booking.is_student && Number(booking.discount_amount) > 0 && (
+                  <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    Verified student discount applied to this payment.
+                  </div>
+                )}
+                <div className="space-y-3 text-sm text-gray-600">
+                  <div className="flex items-center justify-between">
+                    <span>Base ticket price</span>
+                    <span className="font-semibold text-gray-900">{formatPrice(booking.base_price)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Student discount</span>
+                    <span className="font-semibold text-emerald-600">-{formatPrice(booking.discount_amount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-3 text-base">
+                    <span className="font-bold text-gray-900">Total due</span>
+                    <span className="font-bold text-indigo-600">{formatPrice(booking.total_price)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               <button
                 type="button"
@@ -170,7 +203,7 @@ function PaymentCheckout() {
                 className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                {isSettled ? 'Payment Completed' : 'Pay with Sandbox Gateway'}
+                {isSettled ? 'Payment Completed' : 'Pay Now'}
               </button>
 
               <button

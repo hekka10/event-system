@@ -111,6 +111,12 @@ class Booking(models.Model):
         if self.status == self.STATUS_CONFIRMED and hasattr(self, 'ticket'):
             return self.ticket
 
+        has_successful_payment = self.payments.filter(status=Payment.STATUS_SUCCESS).exists()
+        if not has_successful_payment:
+            raise ValidationError(
+                {'payment': 'Booking cannot be confirmed without a successful payment.'}
+            )
+
         self.status = self.STATUS_CONFIRMED
         self.confirmed_at = self.confirmed_at or timezone.now()
         self.save(update_fields=['status', 'confirmed_at', 'updated_at'])

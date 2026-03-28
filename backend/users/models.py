@@ -65,6 +65,7 @@ class StudentVerification(models.Model):
         blank=True,
         related_name='approved_student_verifications',
     )
+    verified_at = models.DateTimeField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -102,11 +102,29 @@ function AdminDashboard() {
     );
   }
 
+  const formatDateTime = (value) => new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
+
+  const bookingStatusClasses = {
+    CONFIRMED: 'bg-emerald-100 text-emerald-700',
+    PENDING: 'bg-amber-100 text-amber-700',
+    FAILED: 'bg-rose-100 text-rose-700',
+  };
+
   const statCards = [
     { label: 'Total Users', value: stats.total_users, icon: Users, color: 'bg-blue-500' },
     { label: 'Total Events', value: stats.total_events, icon: Calendar, color: 'bg-indigo-500' },
     { label: 'Total Bookings', value: stats.total_bookings, icon: ShoppingCart, color: 'bg-violet-500' },
-    { label: 'Total Revenue', value: `$${stats.total_revenue}`, icon: DollarSign, color: 'bg-emerald-500' },
+    { label: 'Confirmed Bookings', value: stats.confirmed_bookings, icon: CheckCircle2, color: 'bg-emerald-500' },
+    { label: 'Pending Bookings', value: stats.pending_bookings, icon: Clock, color: 'bg-amber-500' },
+    { label: 'Total Revenue', value: formatCurrency(stats.total_revenue), icon: DollarSign, color: 'bg-teal-500' },
     { label: 'Checked In', value: stats.total_checked_in, icon: Ticket, color: 'bg-amber-500' },
     {
       label: 'Pending Student Reviews',
@@ -131,7 +149,7 @@ function AdminDashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
           {statCards.map((stat) => (
             <div key={stat.label} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5">
               <div className={`${stat.color} p-3 rounded-xl text-white shadow-lg`}>
@@ -246,6 +264,53 @@ function AdminDashboard() {
               </div>
             </div>
 
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-indigo-50/40">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-indigo-500" />
+                  Recent Bookings
+                </h3>
+                <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                  {stats.latest_bookings.length} Latest
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-gray-50/50">
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Attendee</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Event</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {stats.latest_bookings.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-10 text-center text-gray-500 italic">No bookings created yet.</td>
+                      </tr>
+                    ) : (
+                      stats.latest_bookings.map((booking) => (
+                        <tr key={booking.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-4 text-sm">
+                            <p className="font-semibold text-gray-900">{booking.user}</p>
+                            <p className="text-gray-500">{formatDateTime(booking.date)}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{booking.event}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-indigo-600">{formatCurrency(booking.amount)}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`rounded-full px-3 py-1 text-xs font-bold ${bookingStatusClasses[booking.status] || 'bg-gray-100 text-gray-700'}`}>
+                              {booking.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-6 border-b border-gray-50">
@@ -265,7 +330,7 @@ function AdminDashboard() {
                           <p className="text-sm text-gray-500">{payment.reference}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-indigo-600">${payment.amount}</p>
+                          <p className="font-bold text-indigo-600">{formatCurrency(payment.amount)}</p>
                           <p className="text-xs uppercase tracking-wide text-gray-400">{payment.status}</p>
                         </div>
                       </div>

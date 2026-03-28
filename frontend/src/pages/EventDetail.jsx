@@ -6,11 +6,9 @@ import {
   CarFront,
   CheckCircle2,
   Edit3,
-  GraduationCap,
   Loader2,
   MapPin,
   Navigation,
-  ShieldCheck,
   Tag,
   Trash2,
   Users,
@@ -329,28 +327,6 @@ function EventDetail() {
                 </span>
               </div>
 
-              {user?.is_student_verified && Number(event.price) > 0 && (
-                <div className="mb-6 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-2xl p-4 text-sm">
-                  <div className="flex items-center gap-2 font-semibold mb-1">
-                    <GraduationCap className="w-4 h-4" />
-                    Student discount ready
-                  </div>
-                  <p>Your verified student discount will be applied automatically at checkout.</p>
-                </div>
-              )}
-
-              {user && !user.is_student_verified && Number(event.price) > 0 && (
-                <div className="mb-6 bg-amber-50 border border-amber-100 text-amber-700 rounded-2xl p-4 text-sm">
-                  <div className="flex items-center gap-2 font-semibold mb-1">
-                    <ShieldCheck className="w-4 h-4" />
-                    Want student pricing?
-                  </div>
-                  <Link to="/student-verification" className="underline font-semibold">
-                    Submit verification before checkout
-                  </Link>
-                </div>
-              )}
-
               <div className="space-y-4 mb-8">
                 <div className="flex items-center text-sm text-gray-600 gap-2">
                   <Users className="w-4 h-4 text-indigo-500" />
@@ -394,7 +370,7 @@ function EventDetail() {
               )}
 
               <p className="text-center text-xs text-gray-400 mt-6 px-4">
-                Completing checkout triggers booking confirmation, QR ticket generation, and email delivery.
+                Final payment amount, including any approved student discount, is shown during checkout.
               </p>
             </div>
           </div>

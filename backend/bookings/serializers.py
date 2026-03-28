@@ -41,6 +41,8 @@ class TicketSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    transaction_ref = serializers.CharField(source='external_reference', read_only=True)
+
     class Meta:
         model = Payment
         fields = [
@@ -50,6 +52,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             'status',
             'amount',
             'currency',
+            'transaction_ref',
             'external_reference',
             'provider_reference',
             'checkout_url',
@@ -151,6 +154,18 @@ class PaymentVerificationSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[Payment.STATUS_SUCCESS, Payment.STATUS_FAILED])
     provider_reference = serializers.CharField(required=False, allow_blank=True)
     provider_response = serializers.JSONField(required=False)
+
+
+class PaymentVerificationRequestSerializer(PaymentVerificationSerializer):
+    payment_id = serializers.UUIDField(required=False)
+    transaction_ref = serializers.CharField(required=False, allow_blank=False)
+
+    def validate(self, attrs):
+        if not attrs.get('payment_id') and not attrs.get('transaction_ref'):
+            raise serializers.ValidationError(
+                'Either payment_id or transaction_ref is required.'
+            )
+        return attrs
 
 
 class PaymentWebhookSerializer(serializers.Serializer):

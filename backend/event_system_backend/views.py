@@ -19,6 +19,8 @@ class AdminDashboardStats(APIView):
         total_users = User.objects.count()
         total_events = Event.objects.count()
         total_bookings = Booking.objects.count()
+        confirmed_bookings = Booking.objects.filter(status=Booking.STATUS_CONFIRMED).count()
+        pending_bookings = Booking.objects.filter(status=Booking.STATUS_PENDING).count()
         total_revenue = (
             Booking.objects.filter(status=Booking.STATUS_CONFIRMED).aggregate(Sum('total_price'))['total_price__sum']
             or 0.00
@@ -98,6 +100,8 @@ class AdminDashboardStats(APIView):
                 "total_users": total_users,
                 "total_events": total_events,
                 "total_bookings": total_bookings,
+                "confirmed_bookings": confirmed_bookings,
+                "pending_bookings": pending_bookings,
                 "total_revenue": total_revenue,
                 "total_checked_in": total_checked_in,
                 "pending_student_verification_count": pending_student_verifications.count(),

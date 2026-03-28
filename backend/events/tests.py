@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 
 from bookings.models import Booking
 from events.models import Category, Event
+from users.models import StudentVerification
 
 
 User = get_user_model()
@@ -259,3 +260,35 @@ class EventAPITests(APITestCase):
         self.assertEqual(response.data['confirmed_booking_count'], 1)
         self.assertEqual(response.data['remaining_capacity'], 1)
         self.assertFalse(response.data['is_sold_out'])
+
+    def test_event_detail_includes_viewer_student_pricing_preview(self):
+        event = Event.objects.create(
+            title='Discount Preview',
+            description='Desc',
+            date=timezone.now() + timedelta(days=6),
+            location='Hall E',
+            category=self.category,
+            price=Decimal('50.00'),
+            capacity=40,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        StudentVerification.objects.create(
+            user=self.other_user,
+            student_email='other@college.edu',
+            student_id='STU-123',
+            institution_name='Campus College',
+            status=StudentVerification.STATUS_APPROVED,
+            verified_at=timezone.now(),
+            reviewed_at=timezone.now(),
+            approved_by=self.admin,
+        )
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(reverse('event-detail', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['student_discount_percent'], 20)
+        self.assertTrue(response.data['viewer_has_student_discount'])
+        self.assertEqual(Decimal(response.data['viewer_discount_amount']), Decimal('10.00'))
+        self.assertEqual(Decimal(response.data['viewer_total_price']), Decimal('40.00'))
