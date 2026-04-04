@@ -5,8 +5,9 @@ import authService from '../services/authService';
 
 function ProtectedRoute() {
   const location = useLocation();
+  const user = authService.getCurrentUser();
 
-  if (!authService.isAuthenticated()) {
+  if (!authService.isAuthenticated() || !user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

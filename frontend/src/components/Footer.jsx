@@ -1,7 +1,11 @@
 import { Calendar, Mail, Github, Twitter, Instagram } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import authService from '../services/authService';
 
 function Footer() {
+  const user = authService.getCurrentUser();
+  const isAdmin = authService.isAdmin(user);
+
   return (
     <footer className="bg-white border-t border-gray-100 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -37,8 +41,18 @@ function Footer() {
             <h4 className="font-bold text-gray-900 mb-6">Platform</h4>
             <ul className="space-y-4">
               <li><Link to="/events" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Browse Events</Link></li>
-              <li><Link to="/create-event" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Host an Event</Link></li>
-              <li><Link to="/my-bookings" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">My Tickets</Link></li>
+              {user ? (
+                <>
+                  <li><Link to="/create-event" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Host an Event</Link></li>
+                  <li><Link to="/my-bookings" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">My Tickets</Link></li>
+                  <li><Link to="/student-verification" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Student Verification</Link></li>
+                  {isAdmin && (
+                    <li><Link to="/admin-dashboard" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Admin Dashboard</Link></li>
+                  )}
+                </>
+              ) : (
+                <li><Link to="/login" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Login to Manage</Link></li>
+              )}
             </ul>
           </div>
 

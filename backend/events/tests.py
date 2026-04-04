@@ -77,6 +77,37 @@ class EventAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data['is_approved'])
 
+    def test_event_creation_accepts_google_maps_link_alias(self):
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.post(
+            reverse('event-list'),
+            {
+                'title': 'Mapped Event',
+                'description': 'With navigation info',
+                'date': (timezone.now() + timedelta(days=5)).isoformat(),
+                'location': 'Conference Hall',
+                'category': str(self.category.id),
+                'price': '10.00',
+                'capacity': 50,
+                'google_maps_link': 'https://maps.google.com/?q=27.7172,85.3240',
+                'parking_info': 'Use the east gate parking lot.',
+                'latitude': '27.717200',
+                'longitude': '85.324000',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        event = Event.objects.get(pk=response.data['id'])
+        self.assertEqual(
+            event.parking_map_url,
+            'https://maps.google.com/?q=27.7172,85.3240',
+        )
+        self.assertEqual(
+            response.data['google_maps_link'],
+            'https://maps.google.com/?q=27.7172,85.3240',
+        )
+
     def test_public_event_list_only_includes_approved_events(self):
         approved_event = Event.objects.create(
             title='Approved Event',
@@ -292,3 +323,29 @@ class EventAPITests(APITestCase):
         self.assertTrue(response.data['viewer_has_student_discount'])
         self.assertEqual(Decimal(response.data['viewer_discount_amount']), Decimal('10.00'))
         self.assertEqual(Decimal(response.data['viewer_total_price']), Decimal('40.00'))
+
+    def test_event_detail_exposes_google_maps_link_alias(self):
+        event = Event.objects.create(
+            title='Mapped Detail',
+            description='Desc',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall F',
+            category=self.category,
+            price=Decimal('15.00'),
+            capacity=25,
+            organizer=self.organizer,
+            is_approved=True,
+            parking_info='Park on the north side.',
+            parking_map_url='https://maps.google.com/?q=27.7000,85.3333',
+            latitude=Decimal('27.700000'),
+            longitude=Decimal('85.333300'),
+        )
+
+        response = self.client.get(reverse('event-detail', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data['google_maps_link'],
+            'https://maps.google.com/?q=27.7000,85.3333',
+        )
+        self.assertEqual(response.data['parking_info'], 'Park on the north side.')

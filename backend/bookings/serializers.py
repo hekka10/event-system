@@ -180,6 +180,12 @@ class OfflineBookingSerializer(serializers.Serializer):
     username = serializers.CharField(required=False, allow_blank=True)
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())
 
+    def validate_user_email(self, value):
+        return value.strip().lower()
+
+    def validate_username(self, value):
+        return value.strip()
+
     def validate(self, attrs):
         event = attrs['event']
         if event.date <= timezone.now():

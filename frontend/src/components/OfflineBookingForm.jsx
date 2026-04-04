@@ -18,6 +18,7 @@ function OfflineBookingForm({ onSuccess }) {
     user_email: '',
     event: '',
   });
+  const selectedEvent = events.find((event) => event.id === formData.event);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -47,7 +48,9 @@ function OfflineBookingForm({ onSuccess }) {
 
     try {
       const response = await bookingService.createOfflineBooking(formData, user.access || user.token);
-      setSuccess(`Walk-in confirmed. Ticket code: ${response.ticket_code}`);
+      setSuccess(
+        `Walk-in confirmed for ${response.attendee_email}. Ticket code: ${response.ticket_code}`
+      );
       setFormData({ username: '', user_email: '', event: '' });
       onSuccess?.();
     } catch (submitError) {
@@ -121,6 +124,21 @@ function OfflineBookingForm({ onSuccess }) {
             ))}
           </select>
         </div>
+
+        {selectedEvent && (
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-gray-900">{selectedEvent.title}</span>
+              <span className="font-bold text-indigo-600">
+                {Number(selectedEvent.price) > 0 ? `$${Number(selectedEvent.price).toFixed(2)}` : 'Free'}
+              </span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs uppercase tracking-wide text-gray-400">
+              <span>Remaining Seats</span>
+              <span>{selectedEvent.remaining_capacity}</span>
+            </div>
+          </div>
+        )}
 
         <button
           type="submit"

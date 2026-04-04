@@ -264,7 +264,7 @@ class OfflineBookingView(APIView):
         serializer = OfflineBookingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user, _ = get_or_create_offline_user(
+        user, created_user = get_or_create_offline_user(
             serializer.validated_data['user_email'],
             serializer.validated_data.get('username', ''),
         )
@@ -302,6 +302,9 @@ class OfflineBookingView(APIView):
         return Response(
             {
                 'message': 'Walk-in booking confirmed successfully.',
+                'created_user': created_user,
+                'attendee_email': booking.user.email,
+                'attendee_name': booking.user.username,
                 'booking': BookingSerializer(booking, context={'request': request}).data,
                 'payment': PaymentSerializer(payment).data,
                 'ticket_code': ticket.ticket_code,

@@ -7,12 +7,12 @@ function AdminRoute() {
   const location = useLocation();
   const user = authService.getCurrentUser();
 
-  if (!user) {
+  if (!authService.isAuthenticated() || !user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   if (!authService.isAdmin(user)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" replace state={{ from: location, error: 'admin_only' }} />;
   }
 
   return <Outlet />;

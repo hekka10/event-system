@@ -77,7 +77,7 @@ const verifyPayment = async (paymentId, payload, token) => {
 
 const createOfflineBooking = async (payload, token) => {
   return request(
-    '/bookings/offline/',
+    '/admin/offline-booking/',
     {
       method: 'POST',
       headers: getAuthHeaders(token, {

@@ -24,6 +24,7 @@ from .views import AdminDashboardStats
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/admin/", include("bookings.admin_urls")),
     path("api/auth/", include("users.urls")),
     path("api/student/", include("users.student_urls")),
     path("api/events/", include("events.urls")),

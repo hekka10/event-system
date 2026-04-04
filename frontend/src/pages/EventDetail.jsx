@@ -157,6 +157,7 @@ function EventDetail() {
     hour: '2-digit',
     minute: '2-digit',
   });
+  const googleMapsLink = event.google_maps_link || event.parking_map_url;
   const canManageEvent = Boolean(user && (isAdmin || user.id === event.organizer));
   const canApproveEvent = Boolean(isAdmin && !event.is_approved);
 
@@ -268,7 +269,7 @@ function EventDetail() {
                 </div>
               </div>
 
-              {(event.parking_info || event.parking_map_url || (event.latitude && event.longitude)) && (
+              {(event.parking_info || googleMapsLink || (event.latitude && event.longitude)) && (
                 <div className="mt-10 pt-10 border-t border-gray-100">
                   <div className="flex items-start gap-4 mb-5">
                     <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
@@ -289,15 +290,15 @@ function EventDetail() {
                   )}
 
                   <div className="flex flex-wrap gap-4">
-                    {event.parking_map_url && (
+                    {googleMapsLink && (
                       <a
-                        href={event.parking_map_url}
+                        href={googleMapsLink}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-2 text-indigo-600 font-semibold hover:underline"
                       >
                         <Navigation className="w-4 h-4" />
-                        Open parking map
+                        Open in Google Maps
                       </a>
                     )}
 

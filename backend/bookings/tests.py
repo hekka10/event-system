@@ -454,6 +454,41 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(booking.booking_source, Booking.SOURCE_OFFLINE)
         self.assertEqual(booking.payments.first().provider, Payment.PROVIDER_CASH)
         self.assertTrue(hasattr(booking, 'ticket'))
+        self.assertEqual(response.data['attendee_email'], 'walkin@example.com')
+        self.assertTrue(response.data['created_user'])
+
+    def test_admin_offline_booking_alias_confirms_walk_in_immediately(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.post(
+            reverse('admin_offline_booking'),
+            {
+                'username': 'Walk In Alias',
+                'user_email': 'aliaswalkin@example.com',
+                'event': str(self.event.id),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        booking = Booking.objects.get(pk=response.data['booking']['id'])
+        self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
+        self.assertEqual(response.data['ticket_code'], booking.ticket.ticket_code)
+
+    def test_non_admin_cannot_create_offline_booking(self):
+        self.client.force_authenticate(user=self.attendee)
+
+        response = self.client.post(
+            reverse('admin_offline_booking'),
+            {
+                'username': 'Walk In',
+                'user_email': 'forbidden@example.com',
+                'event': str(self.event.id),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_ticket_scan_allows_event_organizer_and_blocks_duplicate_scan(self):
         booking = Booking.objects.create(

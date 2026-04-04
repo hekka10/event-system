@@ -49,11 +49,11 @@ const validateFormData = (formData) => {
         nextErrors.price = 'Price cannot be negative.';
     }
 
-    if (formData.parking_map_url) {
+    if (formData.google_maps_link) {
         try {
-            new URL(formData.parking_map_url);
+            new URL(formData.google_maps_link);
         } catch {
-            nextErrors.parking_map_url = 'Enter a valid parking map URL.';
+            nextErrors.google_maps_link = 'Enter a valid Google Maps link.';
         }
     }
 
@@ -93,7 +93,7 @@ function EventForm() {
         date: '',
         location: '',
         parking_info: '',
-        parking_map_url: '',
+        google_maps_link: '',
         latitude: '',
         longitude: '',
         category: '',
@@ -128,7 +128,7 @@ function EventForm() {
                     date: getLocalDateTimeValue(data.date),
                     location: data.location,
                     parking_info: data.parking_info || '',
-                    parking_map_url: data.parking_map_url || '',
+                    google_maps_link: data.google_maps_link || data.parking_map_url || '',
                     latitude: data.latitude || '',
                     longitude: data.longitude || '',
                     category: data.category || '',
@@ -406,16 +406,16 @@ function EventForm() {
                             </div>
 
                             <div className="space-y-2 md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Parking Map URL</label>
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Google Maps Link</label>
                                 <input
                                     type="url"
-                                    name="parking_map_url"
-                                    value={formData.parking_map_url}
+                                    name="google_maps_link"
+                                    value={formData.google_maps_link}
                                     onChange={handleChange}
                                     placeholder="https://maps.google.com/..."
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                                 />
-                                {fieldErrors.parking_map_url && <p className="text-sm text-red-600">{fieldErrors.parking_map_url}</p>}
+                                {fieldErrors.google_maps_link && <p className="text-sm text-red-600">{fieldErrors.google_maps_link}</p>}
                             </div>
 
                             <div className="space-y-2 md:col-span-2">

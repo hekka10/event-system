@@ -15,6 +15,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.ReadOnlyField(source='category.name')
     organizer_email = serializers.ReadOnlyField(source='organizer.email')
+    google_maps_link = serializers.SerializerMethodField()
     confirmed_booking_count = serializers.SerializerMethodField()
     remaining_capacity = serializers.SerializerMethodField()
     is_sold_out = serializers.SerializerMethodField()
@@ -27,7 +28,7 @@ class EventSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'title', 'description', 'date', 'location',
-            'parking_info', 'parking_map_url', 'latitude', 'longitude',
+            'parking_info', 'parking_map_url', 'google_maps_link', 'latitude', 'longitude',
             'category', 'category_name', 'price', 'capacity',
             'image', 'organizer', 'organizer_email', 'is_approved',
             'confirmed_booking_count', 'remaining_capacity', 'is_sold_out',
@@ -41,6 +42,16 @@ class EventSerializer(serializers.ModelSerializer):
         # Automatically set the organizer to the current user
         validated_data['organizer'] = self.context['request'].user
         return super().create(validated_data)
+
+    def to_internal_value(self, data):
+        mutable_data = data.copy()
+        google_maps_link = mutable_data.get('google_maps_link')
+        parking_map_url = mutable_data.get('parking_map_url')
+
+        if google_maps_link and not parking_map_url:
+            mutable_data['parking_map_url'] = google_maps_link
+
+        return super().to_internal_value(mutable_data)
 
     def validate_title(self, value):
         if not value or not value.strip():
@@ -86,6 +97,9 @@ class EventSerializer(serializers.ModelSerializer):
 
     def get_confirmed_booking_count(self, obj):
         return getattr(obj, 'confirmed_booking_count_value', obj.bookings.filter(status='CONFIRMED').count())
+
+    def get_google_maps_link(self, obj):
+        return obj.parking_map_url
 
     def get_remaining_capacity(self, obj):
         return max(obj.capacity - self.get_confirmed_booking_count(obj), 0)
