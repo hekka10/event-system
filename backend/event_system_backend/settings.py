@@ -212,9 +212,20 @@ SIMPLE_JWT = {
 }
 
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173')
+BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'http://127.0.0.1:8000')
 GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '')
 PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'mock').upper()
 PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', 'dev-webhook-secret')
+ESEWA_PRODUCT_CODE = os.getenv('ESEWA_PRODUCT_CODE', '')
+ESEWA_SECRET_KEY = os.getenv('ESEWA_SECRET_KEY', '')
+ESEWA_FORM_URL = os.getenv(
+    'ESEWA_FORM_URL',
+    'https://rc-epay.esewa.com.np/api/epay/main/v2/form',
+)
+ESEWA_STATUS_URL = os.getenv(
+    'ESEWA_STATUS_URL',
+    'https://rc.esewa.com.np/api/epay/transaction/status/',
+)
 STUDENT_DISCOUNT_PERCENT = int(os.getenv('STUDENT_DISCOUNT_PERCENT', '20'))
 
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', DEBUG)

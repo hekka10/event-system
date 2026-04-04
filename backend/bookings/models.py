@@ -138,10 +138,12 @@ class Booking(models.Model):
 
 class Payment(models.Model):
     PROVIDER_MOCK = 'MOCK'
+    PROVIDER_ESEWA = 'ESEWA'
     PROVIDER_CASH = 'CASH'
     PROVIDER_FREE = 'FREE'
     PROVIDER_CHOICES = [
         (PROVIDER_MOCK, 'Sandbox Gateway'),
+        (PROVIDER_ESEWA, 'eSewa'),
         (PROVIDER_CASH, 'Cash'),
         (PROVIDER_FREE, 'Free Booking'),
     ]
