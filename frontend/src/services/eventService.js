@@ -21,6 +21,16 @@ const getEventById = async (id, token = '') => {
   );
 };
 
+const getRecommendedEvents = async (token) => {
+  return request(
+    '/events/recommended/',
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch recommended events'
+  );
+};
+
 const createEvent = async (eventData, token) => {
   return request(
     '/events/',
@@ -76,6 +86,7 @@ const approveEvent = async (id, token) => {
 const eventService = {
   getAllEvents,
   getEventById,
+  getRecommendedEvents,
   createEvent,
   updateEvent,
   deleteEvent,

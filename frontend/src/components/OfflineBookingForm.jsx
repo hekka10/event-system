@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Loader2, UserPlus } from 'lucide-react';
 import authService from '../services/authService';
 import bookingService from '../services/bookingService';
 import eventService from '../services/eventService';
+import { formatNpr } from '../utils/currency';
 
 
 function OfflineBookingForm({ onSuccess }) {
@@ -126,11 +127,11 @@ function OfflineBookingForm({ onSuccess }) {
         </div>
 
         {selectedEvent && (
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-gray-900">{selectedEvent.title}</span>
               <span className="font-bold text-indigo-600">
-                {Number(selectedEvent.price) > 0 ? `$${Number(selectedEvent.price).toFixed(2)}` : 'Free'}
+                {formatNpr(selectedEvent.price, { allowFree: true })}
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs uppercase tracking-wide text-gray-400">

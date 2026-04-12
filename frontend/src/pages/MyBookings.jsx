@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import bookingService from '../services/bookingService';
 import authService from '../services/authService';
 import TicketPreviewCard from '../components/TicketPreviewCard';
+import { formatNpr } from '../utils/currency';
 import {
     ArrowRight,
     Calendar,
@@ -10,6 +11,7 @@ import {
     Clock3,
     ExternalLink,
     Loader2,
+    Mail,
     MapPin,
     QrCode,
     Receipt,
@@ -34,7 +36,7 @@ const formatDateTime = (value) => {
     });
 };
 
-const formatPrice = (value) => `$${Number(value || 0).toFixed(2)}`;
+const formatPrice = (value) => formatNpr(value);
 
 const getStatusMeta = (booking) => {
     if (booking.status === 'CONFIRMED') {
@@ -71,6 +73,7 @@ function MyBookings() {
     const [notice, setNotice] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [expandedTicketBookingId, setExpandedTicketBookingId] = useState(null);
+    const [emailingBookingId, setEmailingBookingId] = useState(null);
     const user = authService.getCurrentUser();
     const token = user?.access || user?.token || '';
     const navigate = useNavigate();
@@ -119,6 +122,21 @@ function MyBookings() {
 
         return booking.status === statusFilter;
     });
+
+    const handleSendTicketEmail = async (bookingId) => {
+        setEmailingBookingId(bookingId);
+        setError(null);
+        setNotice('');
+
+        try {
+            const response = await bookingService.sendTicketEmail(bookingId, token);
+            setNotice(response.message || 'Ticket email sent successfully.');
+        } catch (sendError) {
+            setError(sendError.message || 'Failed to send ticket email.');
+        } finally {
+            setEmailingBookingId(null);
+        }
+    };
 
     if (loading) {
         return (
@@ -295,6 +313,21 @@ function MyBookings() {
                                                 >
                                                     {expandedTicketBookingId === booking.id ? <ScanLine className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
                                                     {expandedTicketBookingId === booking.id ? 'Hide Ticket' : 'Show Ticket'}
+                                                </button>
+                                            )}
+                                            {booking.ticket && booking.status === 'CONFIRMED' && (
+                                                <button
+                                                    type="button"
+                                                    disabled={emailingBookingId === booking.id}
+                                                    onClick={() => handleSendTicketEmail(booking.id)}
+                                                    className="flex items-center gap-2 text-sm font-semibold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+                                                >
+                                                    {emailingBookingId === booking.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Mail className="w-4 h-4" />
+                                                    )}
+                                                    {emailingBookingId === booking.id ? 'Sending Email...' : 'Send Ticket Email'}
                                                 </button>
                                             )}
                                             {booking.ticket?.is_scanned && (

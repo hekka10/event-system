@@ -168,6 +168,8 @@ EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend',
 )
+if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    EMAIL_BACKEND = 'event_system_backend.email_backend.CertifiEmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '1025'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
@@ -226,6 +228,7 @@ ESEWA_STATUS_URL = os.getenv(
     'ESEWA_STATUS_URL',
     'https://rc.esewa.com.np/api/epay/transaction/status/',
 )
+ESEWA_VERIFY_SSL = env_bool('ESEWA_VERIFY_SSL', not DEBUG)
 STUDENT_DISCOUNT_PERCENT = int(os.getenv('STUDENT_DISCOUNT_PERCENT', '20'))
 
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', DEBUG)

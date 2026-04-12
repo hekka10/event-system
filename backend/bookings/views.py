@@ -1,5 +1,8 @@
+import uuid
+
 from django.conf import settings
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
+from rest_framework.decorators import action
 from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,13 +21,21 @@ from .serializers import (
     TicketScanSerializer,
 )
 from .services import (
+    build_frontend_payment_return_url,
     build_payment_reference,
     create_pending_booking,
     create_payment_for_booking,
+    create_replacement_payment,
+    decode_esewa_callback_data,
     get_booking_validation_error,
+    get_esewa_provider_reference,
+    get_online_payment_provider,
     get_or_create_offline_user,
+    is_esewa_verification_complete,
     process_failed_payment,
     process_successful_payment,
+    send_booking_confirmation_email,
+    verify_esewa_payment,
 )
 
 
@@ -67,6 +78,52 @@ def verify_payment_submission(request, payment, validated_data):
     )
 
 
+def get_esewa_payment_for_callback(request, payment_id=None):
+    raw_data = request.query_params.get('data') or request.data.get('data')
+    candidate_payment_id = (
+        payment_id
+        or request.query_params.get('payment_id')
+        or request.data.get('payment_id')
+    )
+
+    # eSewa can append `?data=...` even when the callback URL already had a query string.
+    # Recover that malformed legacy format so in-flight payments still complete.
+    if candidate_payment_id and '?data=' in str(candidate_payment_id) and not raw_data:
+        candidate_payment_id, raw_data = str(candidate_payment_id).split('?data=', 1)
+
+    callback_payload = decode_esewa_callback_data(raw_data)
+    candidate_payment_id = candidate_payment_id or callback_payload.get('transaction_uuid')
+    if not candidate_payment_id:
+        return None, callback_payload
+
+    try:
+        normalized_payment_id = str(uuid.UUID(str(candidate_payment_id)))
+    except (ValueError, TypeError, AttributeError):
+        fallback_payment_id = callback_payload.get('transaction_uuid')
+        if not fallback_payment_id:
+            return None, callback_payload
+        try:
+            normalized_payment_id = str(uuid.UUID(str(fallback_payment_id)))
+        except (ValueError, TypeError, AttributeError):
+            return None, callback_payload
+
+    payment = get_payment_with_relations().filter(
+        pk=normalized_payment_id,
+        provider=Payment.PROVIDER_ESEWA,
+    ).first()
+    return payment, callback_payload
+
+
+def redirect_to_frontend_payment_result(payment=None, payment_status='failed'):
+    return redirect(
+        build_frontend_payment_return_url(
+            payment=payment,
+            payment_status=payment_status,
+            gateway='esewa',
+        )
+    )
+
+
 class BookingViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ['get', 'post', 'head', 'options']
@@ -93,6 +150,43 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = serializer.save()
         output_serializer = BookingSerializer(booking, context={'request': request})
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='send-ticket-email')
+    def send_ticket_email(self, request, pk=None):
+        booking = self.get_object()
+
+        if booking.status != Booking.STATUS_CONFIRMED:
+            return Response(
+                {'detail': 'Only confirmed bookings can send ticket emails.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not hasattr(booking, 'ticket'):
+            return Response(
+                {'detail': 'This booking does not have a ticket yet.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            send_booking_confirmation_email(
+                booking,
+                ticket=booking.ticket,
+                fail_silently=False,
+            )
+        except Exception:
+            return Response(
+                {'detail': 'Ticket email could not be sent right now. Please try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                'message': f'Ticket email sent to {booking.user.email}.',
+                'email': booking.user.email,
+                'ticket_code': booking.ticket.ticket_code,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PaymentInitiationView(APIView):
@@ -139,11 +233,23 @@ class PaymentInitiationView(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
-        payment = create_payment_for_booking(booking, provider=Payment.PROVIDER_MOCK, method='ONLINE')
+        provider = get_online_payment_provider()
+        try:
+            payment = create_payment_for_booking(booking, provider=provider, method='ONLINE')
+        except ValueError as exc:
+            booking.mark_failed()
+            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        next_action = 'REDIRECT_TO_ESEWA' if provider == Payment.PROVIDER_ESEWA else 'COMPLETE_PAYMENT'
+        message = (
+            'eSewa payment initiated successfully.'
+            if provider == Payment.PROVIDER_ESEWA
+            else 'Payment initiated successfully.'
+        )
         return Response(
             {
-                'message': 'Payment initiated successfully.',
-                'next_action': 'COMPLETE_PAYMENT',
+                'message': message,
+                'next_action': next_action,
                 'booking': BookingSerializer(booking, context={'request': request}).data,
                 'payment': PaymentSerializer(payment).data,
             },
@@ -168,6 +274,42 @@ class PaymentDetailView(APIView):
                 'payment': PaymentSerializer(payment).data,
                 'booking': BookingSerializer(payment.booking, context={'request': request}).data,
             }
+        )
+
+
+class PaymentRetryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, payment_id):
+        payment = get_object_or_404(
+            get_payment_with_relations(),
+            pk=payment_id,
+        )
+
+        if not (request.user.is_staff or payment.user_id == request.user.id):
+            return Response(
+                {'detail': 'You do not have permission to retry this payment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            new_payment = create_replacement_payment(payment)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        next_action = (
+            'REDIRECT_TO_ESEWA'
+            if new_payment.provider == Payment.PROVIDER_ESEWA
+            else 'COMPLETE_PAYMENT'
+        )
+        return Response(
+            {
+                'message': 'A fresh payment session was created.',
+                'next_action': next_action,
+                'booking': BookingSerializer(new_payment.booking, context={'request': request}).data,
+                'payment': PaymentSerializer(new_payment).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -255,6 +397,95 @@ class PaymentWebhookView(APIView):
             )
 
         return Response({'status': payment.status}, status=status.HTTP_200_OK)
+
+
+class EsewaSuccessView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, payment_id=None):
+        return self._handle(request, payment_id=payment_id)
+
+    def post(self, request, payment_id=None):
+        return self._handle(request, payment_id=payment_id)
+
+    def _handle(self, request, payment_id=None):
+        payment, callback_payload = get_esewa_payment_for_callback(request, payment_id=payment_id)
+        if payment is None:
+            return redirect_to_frontend_payment_result(payment_status='failed')
+
+        if payment.status == Payment.STATUS_SUCCESS and payment.booking.status == Booking.STATUS_CONFIRMED:
+            return redirect_to_frontend_payment_result(payment=payment, payment_status='success')
+
+        try:
+            verification_payload = verify_esewa_payment(payment)
+        except ValueError as exc:
+            if payment.status != Payment.STATUS_SUCCESS:
+                payment = process_failed_payment(
+                    payment,
+                    provider_reference=get_esewa_provider_reference(callback_payload),
+                    provider_response={
+                        **(payment.provider_response or {}),
+                        'gateway': 'esewa',
+                        'callback': callback_payload,
+                        'error': str(exc),
+                    },
+                )
+            return redirect_to_frontend_payment_result(payment=payment, payment_status='failed')
+
+        provider_reference = get_esewa_provider_reference(callback_payload, verification_payload)
+        provider_response = {
+            **(payment.provider_response or {}),
+            'gateway': 'esewa',
+            'callback': callback_payload,
+            'verification': verification_payload,
+        }
+
+        if is_esewa_verification_complete(verification_payload):
+            payment, _, capacity_error = process_successful_payment(
+                payment,
+                provider_reference=provider_reference,
+                provider_response=provider_response,
+            )
+            if capacity_error:
+                return redirect_to_frontend_payment_result(payment=payment, payment_status='failed')
+            return redirect_to_frontend_payment_result(payment=payment, payment_status='success')
+
+        if payment.status != Payment.STATUS_SUCCESS:
+            payment = process_failed_payment(
+                payment,
+                provider_reference=provider_reference,
+                provider_response=provider_response,
+            )
+        return redirect_to_frontend_payment_result(payment=payment, payment_status='failed')
+
+
+class EsewaFailureView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, payment_id=None):
+        return self._handle(request, payment_id=payment_id)
+
+    def post(self, request, payment_id=None):
+        return self._handle(request, payment_id=payment_id)
+
+    def _handle(self, request, payment_id=None):
+        payment, callback_payload = get_esewa_payment_for_callback(request, payment_id=payment_id)
+
+        if payment is not None and payment.status != Payment.STATUS_SUCCESS:
+            payment = process_failed_payment(
+                payment,
+                provider_reference=get_esewa_provider_reference(callback_payload),
+                provider_response={
+                    **(payment.provider_response or {}),
+                    'gateway': 'esewa',
+                    'callback': callback_payload,
+                    'status': 'FAILED_REDIRECT',
+                },
+            )
+
+        return redirect_to_frontend_payment_result(payment=payment, payment_status='failed')
 
 
 class OfflineBookingView(APIView):

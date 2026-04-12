@@ -19,6 +19,7 @@ import authService from '../services/authService';
 import adminService from '../services/adminService';
 import eventService from '../services/eventService';
 import studentService from '../services/studentService';
+import { formatNpr } from '../utils/currency';
 
 
 function AdminDashboard() {
@@ -110,8 +111,6 @@ function AdminDashboard() {
     minute: '2-digit',
   });
 
-  const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
-
   const bookingStatusClasses = {
     CONFIRMED: 'bg-emerald-100 text-emerald-700',
     PENDING: 'bg-amber-100 text-amber-700',
@@ -124,7 +123,7 @@ function AdminDashboard() {
     { label: 'Total Bookings', value: stats.total_bookings, icon: ShoppingCart, color: 'bg-violet-500' },
     { label: 'Confirmed Bookings', value: stats.confirmed_bookings, icon: CheckCircle2, color: 'bg-emerald-500' },
     { label: 'Pending Bookings', value: stats.pending_bookings, icon: Clock, color: 'bg-amber-500' },
-    { label: 'Total Revenue', value: formatCurrency(stats.total_revenue), icon: DollarSign, color: 'bg-teal-500' },
+    { label: 'Total Revenue', value: formatNpr(stats.total_revenue), icon: DollarSign, color: 'bg-teal-500' },
     { label: 'Checked In', value: stats.total_checked_in, icon: Ticket, color: 'bg-amber-500' },
     {
       label: 'Pending Student Reviews',
@@ -280,7 +279,7 @@ function AdminDashboard() {
                     <tr className="bg-gray-50/50">
                       <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Attendee</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Event</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount (NRs)</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
@@ -297,7 +296,7 @@ function AdminDashboard() {
                             <p className="text-gray-500">{formatDateTime(booking.date)}</p>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{booking.event}</td>
-                          <td className="px-6 py-4 text-sm font-semibold text-indigo-600">{formatCurrency(booking.amount)}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-indigo-600">{formatNpr(booking.amount)}</td>
                           <td className="px-6 py-4 text-sm">
                             <span className={`rounded-full px-3 py-1 text-xs font-bold ${bookingStatusClasses[booking.status] || 'bg-gray-100 text-gray-700'}`}>
                               {booking.status}
@@ -330,7 +329,7 @@ function AdminDashboard() {
                           <p className="text-sm text-gray-500">{payment.reference}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-indigo-600">{formatCurrency(payment.amount)}</p>
+                          <p className="font-bold text-indigo-600">{formatNpr(payment.amount)}</p>
                           <p className="text-xs uppercase tracking-wide text-gray-400">{payment.status}</p>
                         </div>
                       </div>

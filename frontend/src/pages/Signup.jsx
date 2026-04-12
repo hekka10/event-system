@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import authService from '../services/authService';
 import { Mail, Lock, User, Loader2, ArrowRight, Sparkles } from 'lucide-react';
+import GoogleSignInButton from '../components/GoogleSignInButton';
+
+const hasGoogleAuth = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
 function Signup() {
     const [formData, setFormData] = useState({
@@ -102,6 +105,28 @@ function Signup() {
                     </form>
 
                     <div className="mt-10 text-center">
+                        {hasGoogleAuth && (
+                            <>
+                                <div className="mb-6">
+                                    <GoogleSignInButton
+                                        onSuccess={() => navigate(redirectTo, { replace: true })}
+                                        onError={(googleError) =>
+                                            setError(googleError.message || 'Google sign up is not available right now.')
+                                        }
+                                    />
+                                </div>
+
+                                <div className="relative mb-6">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-gray-100" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] text-gray-400">
+                                        <span className="bg-white px-3">or continue with email</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
                         <p className="text-gray-500 font-medium">
                             Already have an account?{' '}
                             <Link to="/login" className="text-indigo-600 font-bold hover:text-indigo-700 underline underline-offset-4">

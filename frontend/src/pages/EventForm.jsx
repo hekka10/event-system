@@ -365,7 +365,7 @@ function EventForm() {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Price ($)</label>
+                                <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider">Price (NRs)</label>
                                 <input
                                     type="number"
                                     name="price"

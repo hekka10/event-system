@@ -139,6 +139,38 @@ class EventAPITests(APITestCase):
         self.assertIn(str(approved_event.id), returned_ids)
         self.assertEqual(len(returned_ids), 1)
 
+    def test_event_list_hides_events_that_have_already_ended(self):
+        upcoming_event = Event.objects.create(
+            title='Upcoming Event',
+            description='Visible on events page',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall A',
+            category=self.category,
+            price=Decimal('20.00'),
+            capacity=10,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        past_event = Event.objects.create(
+            title='Past Event',
+            description='Should be hidden from events page',
+            date=timezone.now() + timedelta(days=5),
+            location='Hall B',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=20,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        Event.objects.filter(pk=past_event.pk).update(date=timezone.now() - timedelta(days=2))
+
+        response = self.client.get(reverse('event-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = {item['id'] for item in response.data}
+        self.assertIn(str(upcoming_event.id), returned_ids)
+        self.assertNotIn(str(past_event.id), returned_ids)
+
     def test_organizer_can_view_unapproved_own_event(self):
         event = Event.objects.create(
             title='Private Draft',
@@ -157,6 +189,181 @@ class EventAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(str(response.data['id']), str(event.id))
+
+    def test_recommended_events_prioritize_categories_from_past_confirmed_bookings(self):
+        music_category = Category.objects.create(name='Music')
+        past_attended_event = Event.objects.create(
+            title='Past Workshop',
+            description='Already attended',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall A',
+            category=self.category,
+            price=Decimal('20.00'),
+            capacity=20,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        Event.objects.filter(pk=past_attended_event.pk).update(date=timezone.now() - timedelta(days=5))
+        past_attended_event.refresh_from_db()
+
+        Booking.objects.create(
+            user=self.other_user,
+            event=past_attended_event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('20.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('20.00'),
+            confirmed_at=timezone.now() - timedelta(days=5),
+        )
+
+        recommended_match = Event.objects.create(
+            title='Recommended Match',
+            description='Same category as past booking',
+            date=timezone.now() + timedelta(days=8),
+            location='Hall B',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=50,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        other_category_event = Event.objects.create(
+            title='Other Category Event',
+            description='Different category',
+            date=timezone.now() + timedelta(days=9),
+            location='Hall C',
+            category=music_category,
+            price=Decimal('30.00'),
+            capacity=50,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        already_booked_future_event = Event.objects.create(
+            title='Already Booked Future Event',
+            description='Should be excluded',
+            date=timezone.now() + timedelta(days=10),
+            location='Hall D',
+            category=self.category,
+            price=Decimal('15.00'),
+            capacity=50,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        sold_out_event = Event.objects.create(
+            title='Sold Out Event',
+            description='Should be excluded',
+            date=timezone.now() + timedelta(days=11),
+            location='Hall E',
+            category=self.category,
+            price=Decimal('15.00'),
+            capacity=1,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        Booking.objects.create(
+            user=self.other_user,
+            event=already_booked_future_event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('15.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('15.00'),
+        )
+        Booking.objects.create(
+            user=self.organizer,
+            event=sold_out_event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('15.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('15.00'),
+            confirmed_at=timezone.now(),
+        )
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(reverse('event-recommended'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = [item['id'] for item in response.data]
+        self.assertIn(str(recommended_match.id), returned_ids)
+        self.assertIn(str(other_category_event.id), returned_ids)
+        self.assertNotIn(str(already_booked_future_event.id), returned_ids)
+        self.assertNotIn(str(sold_out_event.id), returned_ids)
+        self.assertEqual(returned_ids[0], str(recommended_match.id))
+
+    def test_recommended_events_require_authentication(self):
+        Event.objects.create(
+            title='Protected Recommendation',
+            description='Should not be exposed to guests',
+            date=timezone.now() + timedelta(days=5),
+            location='Members Hall',
+            category=self.category,
+            price=Decimal('20.00'),
+            capacity=50,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+
+        response = self.client.get(reverse('event-recommended'))
+
+        self.assertIn(
+            response.status_code,
+            {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
+        )
+
+    def test_recommended_events_fallback_to_popular_upcoming_events_without_history(self):
+        popular_event = Event.objects.create(
+            title='Popular Event',
+            description='Most booked upcoming event',
+            date=timezone.now() + timedelta(days=4),
+            location='Main Hall',
+            category=self.category,
+            price=Decimal('20.00'),
+            capacity=100,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        newer_event = Event.objects.create(
+            title='New Event',
+            description='Fallback option',
+            date=timezone.now() + timedelta(days=5),
+            location='Side Hall',
+            category=self.category,
+            price=Decimal('22.00'),
+            capacity=100,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        for index in range(3):
+            attendee = User.objects.create_user(
+                email=f'fallback{index}@example.com',
+                username=f'fallback{index}',
+                password='password123',
+            )
+            Booking.objects.create(
+                user=attendee,
+                event=popular_event,
+                status=Booking.STATUS_CONFIRMED,
+                booking_source=Booking.SOURCE_ONLINE,
+                is_student=False,
+                base_price=Decimal('20.00'),
+                discount_amount=Decimal('0.00'),
+                total_price=Decimal('20.00'),
+                confirmed_at=timezone.now(),
+            )
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(reverse('event-recommended'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = [item['id'] for item in response.data]
+        self.assertIn(str(popular_event.id), returned_ids)
+        self.assertIn(str(newer_event.id), returned_ids)
+        self.assertEqual(returned_ids[0], str(popular_event.id))
 
     def test_only_organizer_or_admin_can_update_event(self):
         event = Event.objects.create(

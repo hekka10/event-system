@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Tag, Users } from 'lucide-react';
 
+import { formatNpr } from '../utils/currency';
+
 const EventCard = ({ event }) => {
     const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
         weekday: 'short',
@@ -63,7 +65,7 @@ const EventCard = ({ event }) => {
 
                 <div className="flex items-center justify-between pt-4 border-t border-gray-50 mt-auto">
                     <span className="text-lg font-bold text-indigo-600">
-                        {event.price > 0 ? `$${event.price}` : 'Free'}
+                        {formatNpr(event.price, { allowFree: true })}
                     </span>
                     <Link
                         to={`/events/${event.id}`}

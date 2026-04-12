@@ -1,16 +1,20 @@
-from rest_framework import permissions, status, viewsets
 from django.db.models import Count, Q
-from .models import Event, Category
-from .serializers import EventSerializer, CategorySerializer
-from .permissions import IsAdminOrReadOnly, IsOrganizerOrAdmin
-
+from django.utils import timezone
 from rest_framework.decorators import action
+from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
+
+from .models import Category, Event
+from .permissions import IsAdminOrReadOnly, IsOrganizerOrAdmin
+from .serializers import CategorySerializer, EventSerializer
+from .services import get_recommended_events_for_user
+
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all().order_by('name')
     serializer_class = CategorySerializer
     permission_classes = [IsAdminOrReadOnly]
+
 
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.select_related('category', 'organizer').annotate(
@@ -26,6 +30,8 @@ class EventViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'approve':
             permission_classes = [permissions.IsAdminUser]
+        elif self.action == 'recommended':
+            permission_classes = [permissions.IsAuthenticated]
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             permission_classes = [permissions.IsAuthenticated, IsOrganizerOrAdmin]
         else:
@@ -41,6 +47,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+
+        # The public events page should only surface upcoming events.
+        if self.action == 'list':
+            queryset = queryset.filter(date__gt=timezone.now())
         
         # Admin can see all, regular users only see approved
         user = self.request.user
@@ -61,4 +71,10 @@ class EventViewSet(viewsets.ModelViewSet):
         event.is_approved = True
         event.save(update_fields=['is_approved', 'updated_at'])
         serializer = self.get_serializer(event)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def recommended(self, request):
+        recommended_events = get_recommended_events_for_user(request.user)
+        serializer = self.get_serializer(recommended_events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

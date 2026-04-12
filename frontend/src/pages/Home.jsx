@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
-import { Sparkles, Calendar, Users, ShieldCheck, ArrowRight, Zap, Loader2 } from 'lucide-react';
+import RecommendedEventsSection from '../components/RecommendedEventsSection';
+import authService from '../services/authService';
+import { Calendar, Users, ShieldCheck, ArrowRight, Zap, Loader2 } from 'lucide-react';
 
 function Home() {
   const [featuredEvents, setFeaturedEvents] = useState([]);
+  const [recommendedEvents, setRecommendedEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
+  const user = authService.getCurrentUser();
+  const token = user?.access || user?.token || '';
 
   useEffect(() => {
     const fetchLatestEvents = async () => {
@@ -21,6 +27,29 @@ function Home() {
     };
     fetchLatestEvents();
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setRecommendedEvents([]);
+      setRecommendationsLoading(false);
+      return;
+    }
+
+    const fetchRecommendedEvents = async () => {
+      setRecommendationsLoading(true);
+      try {
+        const data = await eventService.getRecommendedEvents(token);
+        setRecommendedEvents(data.slice(0, 3));
+      } catch (error) {
+        console.error('Error fetching recommended events:', error);
+        setRecommendedEvents([]);
+      } finally {
+        setRecommendationsLoading(false);
+      }
+    };
+
+    fetchRecommendedEvents();
+  }, [token]);
 
   return (
     <div className="bg-white">
@@ -86,6 +115,13 @@ function Home() {
           </div>
         </div>
       </section>
+
+      {user && (
+        <RecommendedEventsSection
+          events={recommendedEvents}
+          loading={recommendationsLoading}
+        />
+      )}
 
       {/* Latest Events Section */}
       <section className="py-24 bg-gray-50/50">

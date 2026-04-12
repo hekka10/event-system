@@ -42,6 +42,7 @@ class TicketSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     transaction_ref = serializers.CharField(source='external_reference', read_only=True)
+    form_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
@@ -56,11 +57,17 @@ class PaymentSerializer(serializers.ModelSerializer):
             'external_reference',
             'provider_reference',
             'checkout_url',
+            'form_fields',
             'paid_at',
             'verified_at',
             'created_at',
             'updated_at',
         ]
+
+    def get_form_fields(self, obj):
+        if obj.provider != Payment.PROVIDER_ESEWA:
+            return None
+        return (obj.provider_response or {}).get('form_fields')
 
 
 class BookingSerializer(serializers.ModelSerializer):

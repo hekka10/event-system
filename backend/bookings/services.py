@@ -1,5 +1,14 @@
-from decimal import Decimal, ROUND_HALF_UP
+import logging
+import base64
+import binascii
+import hashlib
+import hmac
+import json
+import ssl
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,6 +20,9 @@ from events.models import Event
 from users.models import StudentVerification
 
 from .models import Booking, Payment
+
+
+logger = logging.getLogger(__name__)
 
 
 User = get_user_model()
@@ -106,10 +118,204 @@ def build_payment_reference(prefix='PAY'):
 
 
 def build_checkout_url(payment):
+    return build_absolute_frontend_url(f'/checkout/{payment.id}')
+
+
+def get_online_payment_provider():
+    provider = getattr(settings, 'PAYMENT_PROVIDER', Payment.PROVIDER_MOCK).upper()
+    if provider == Payment.PROVIDER_ESEWA:
+        return Payment.PROVIDER_ESEWA
+    return Payment.PROVIDER_MOCK
+
+
+def build_absolute_frontend_url(path, query_params=None):
     base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
-    return f"{base_url}/checkout/{payment.id}"
+    url = f"{base_url}{path}"
+    if query_params:
+        return f"{url}?{urlencode(query_params)}"
+    return url
 
 
+def build_frontend_payment_return_url(payment=None, payment_status='pending', gateway='esewa'):
+    path = f"/checkout/{payment.id}" if payment is not None else '/my-bookings'
+    return build_absolute_frontend_url(
+        path,
+        query_params={
+            'gateway': gateway,
+            'status': payment_status,
+        },
+    )
+
+
+def build_absolute_backend_url(path, query_params=None):
+    base_url = getattr(settings, 'BACKEND_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
+    url = f"{base_url}{path}"
+    if query_params:
+        return f"{url}?{urlencode(query_params)}"
+    return url
+
+
+def get_esewa_success_url(payment=None):
+    if payment is None:
+        return build_absolute_backend_url('/api/payments/esewa/success/')
+    return build_absolute_backend_url(f'/api/payments/esewa/success/{payment.id}/')
+
+
+def get_esewa_failure_url(payment=None):
+    if payment is None:
+        return build_absolute_backend_url('/api/payments/esewa/failure/')
+    return build_absolute_backend_url(f'/api/payments/esewa/failure/{payment.id}/')
+
+
+def generate_esewa_signature(total_amount, transaction_uuid, product_code):
+    secret_key = getattr(settings, 'ESEWA_SECRET_KEY', '')
+    if not secret_key:
+        raise ValueError('ESEWA_SECRET_KEY is not configured.')
+
+    signed_payload = (
+        f"total_amount={quantize_amount(total_amount)},"
+        f"transaction_uuid={transaction_uuid},"
+        f"product_code={product_code}"
+    )
+    digest = hmac.new(
+        secret_key.encode('utf-8'),
+        signed_payload.encode('utf-8'),
+        hashlib.sha256,
+    ).digest()
+    return base64.b64encode(digest).decode('utf-8')
+
+
+def build_esewa_payload(payment):
+    product_code = getattr(settings, 'ESEWA_PRODUCT_CODE', '')
+    if not product_code:
+        raise ValueError('ESEWA_PRODUCT_CODE is not configured.')
+
+    total_amount = quantize_amount(payment.amount)
+    transaction_uuid = str(payment.id)
+
+    return {
+        'amount': str(total_amount),
+        'tax_amount': '0',
+        'total_amount': str(total_amount),
+        'transaction_uuid': transaction_uuid,
+        'product_code': product_code,
+        'product_service_charge': '0',
+        'product_delivery_charge': '0',
+        'success_url': get_esewa_success_url(payment),
+        'failure_url': get_esewa_failure_url(payment),
+        'signed_field_names': 'total_amount,transaction_uuid,product_code',
+        'signature': generate_esewa_signature(
+            total_amount=total_amount,
+            transaction_uuid=transaction_uuid,
+            product_code=product_code,
+        ),
+    }
+
+
+def decode_esewa_callback_data(raw_value):
+    if not raw_value:
+        return {}
+
+    encoded_value = str(raw_value).strip()
+    encoded_value += '=' * (-len(encoded_value) % 4)
+
+    try:
+        decoded_value = base64.b64decode(encoded_value)
+        payload = json.loads(decoded_value.decode('utf-8'))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return {}
+
+    return payload if isinstance(payload, dict) else {}
+
+
+def get_esewa_provider_reference(callback_payload=None, verification_payload=None):
+    callback_payload = callback_payload or {}
+    verification_payload = verification_payload or {}
+    return (
+        verification_payload.get('transaction_code')
+        or callback_payload.get('transaction_code')
+        or callback_payload.get('reference_id')
+        or callback_payload.get('ref_id')
+        or ''
+    )
+
+
+def is_esewa_verification_complete(verification_payload):
+    return str((verification_payload or {}).get('status', '')).upper() == 'COMPLETE'
+
+
+def attach_esewa_checkout_details(payment):
+    payment.checkout_url = getattr(settings, 'ESEWA_FORM_URL', '').strip()
+    payment.provider_response = {
+        **(payment.provider_response or {}),
+        'form_fields': build_esewa_payload(payment),
+    }
+    payment.save(update_fields=['checkout_url', 'provider_response', 'updated_at'])
+    return payment
+
+
+@transaction.atomic
+def create_replacement_payment(payment):
+    locked_payment = Payment.objects.select_for_update().select_related('booking', 'user').get(pk=payment.pk)
+    booking = locked_payment.booking
+
+    if locked_payment.status == Payment.STATUS_SUCCESS or booking.status == Booking.STATUS_CONFIRMED:
+        raise ValueError('A successful payment already exists for this booking.')
+
+    if booking.status != Booking.STATUS_PENDING:
+        raise ValueError('Only pending bookings can start a new payment session.')
+
+    if locked_payment.status != Payment.STATUS_FAILED:
+        provider_response = {
+            **(locked_payment.provider_response or {}),
+            'reason': 'superseded',
+            'message': 'Payment replaced with a fresh checkout session.',
+        }
+        locked_payment.status = Payment.STATUS_FAILED
+        locked_payment.provider_response = provider_response
+        locked_payment.verified_at = timezone.now()
+        locked_payment.save(
+            update_fields=['status', 'provider_response', 'verified_at', 'updated_at']
+        )
+
+    provider = locked_payment.provider
+    if provider == Payment.PROVIDER_ESEWA:
+        provider = get_online_payment_provider()
+
+    return create_payment_for_booking(
+        booking,
+        provider=provider,
+        method=locked_payment.method or 'ONLINE',
+    )
+
+
+def verify_esewa_payment(payment):
+    status_url = getattr(settings, 'ESEWA_STATUS_URL', '').strip()
+    product_code = getattr(settings, 'ESEWA_PRODUCT_CODE', '').strip()
+    verify_ssl = getattr(settings, 'ESEWA_VERIFY_SSL', True)
+
+    if not status_url:
+        raise ValueError('ESEWA_STATUS_URL is not configured.')
+    if not product_code:
+        raise ValueError('ESEWA_PRODUCT_CODE is not configured.')
+
+    query = urlencode(
+        {
+            'product_code': product_code,
+            'total_amount': str(quantize_amount(payment.amount)),
+            'transaction_uuid': str(payment.id),
+        }
+    )
+
+    ssl_context = None
+    if not verify_ssl:
+        ssl_context = ssl._create_unverified_context()
+
+    with urlopen(f"{status_url}?{query}", timeout=15, context=ssl_context) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+@transaction.atomic
 def create_payment_for_booking(booking, provider=Payment.PROVIDER_MOCK, method='ONLINE', status=Payment.STATUS_INITIATED):
     payment = Payment.objects.create(
         booking=booking,
@@ -125,6 +331,10 @@ def create_payment_for_booking(booking, provider=Payment.PROVIDER_MOCK, method='
     if provider == Payment.PROVIDER_MOCK:
         payment.checkout_url = build_checkout_url(payment)
         payment.save(update_fields=['checkout_url', 'updated_at'])
+    elif provider == Payment.PROVIDER_ESEWA:
+        payment.currency = 'NPR'
+        payment.save(update_fields=['currency', 'updated_at'])
+        payment = attach_esewa_checkout_details(payment)
 
     return payment
 
@@ -235,7 +445,7 @@ def get_or_create_offline_user(email, username=''):
     return user, True
 
 
-def send_booking_confirmation_email(booking, ticket=None):
+def send_booking_confirmation_email(booking, ticket=None, fail_silently=True):
     ticket = ticket or getattr(booking, 'ticket', None)
     if ticket is None:
         ticket = booking.ticket
@@ -249,7 +459,7 @@ def send_booking_confirmation_email(booking, ticket=None):
         f"Ticket Code: {ticket.ticket_code}\n"
         f"Date: {booking.event.date}\n"
         f"Location: {booking.event.location}\n"
-        f"Amount Paid: ${booking.total_price}\n\n"
+        f"Amount Paid: NRs {booking.total_price}\n\n"
         f"You can view your booking at {booking_url}\n"
     )
     html_body = f"""
@@ -259,7 +469,7 @@ def send_booking_confirmation_email(booking, ticket=None):
             <li><strong>Ticket Code:</strong> {ticket.ticket_code}</li>
             <li><strong>Date:</strong> {booking.event.date}</li>
             <li><strong>Location:</strong> {booking.event.location}</li>
-            <li><strong>Amount Paid:</strong> ${booking.total_price}</li>
+            <li><strong>Amount Paid:</strong> NRs {booking.total_price}</li>
         </ul>
         <p>Your QR ticket is attached to this email.</p>
         <p><a href="{booking_url}">Open my bookings</a></p>
@@ -284,4 +494,8 @@ def send_booking_confirmation_email(booking, ticket=None):
         finally:
             ticket.qr_code.close()
 
-    email.send(fail_silently=True)
+    try:
+        email.send(fail_silently=fail_silently)
+    except Exception:
+        logger.exception("Failed to send booking confirmation email for booking %s", booking.id)
+        raise

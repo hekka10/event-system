@@ -34,6 +34,17 @@ const getBookingById = async (id, token) => {
   );
 };
 
+const sendTicketEmail = async (bookingId, token) => {
+  return request(
+    `/bookings/${bookingId}/send-ticket-email/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+    },
+    'Failed to send ticket email'
+  );
+};
+
 const initiatePayment = async (payload, token) => {
   return request(
     '/payments/initiate/',
@@ -55,6 +66,17 @@ const getPayment = async (paymentId, token) => {
       headers: getAuthHeaders(token),
     },
     'Failed to fetch payment details'
+  );
+};
+
+const retryPayment = async (paymentId, token) => {
+  return request(
+    `/payments/${paymentId}/retry/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+    },
+    'Failed to create a new payment session'
   );
 };
 
@@ -107,8 +129,10 @@ const bookingService = {
   createBooking,
   getMyBookings,
   getBookingById,
+  sendTicketEmail,
   initiatePayment,
   getPayment,
+  retryPayment,
   verifyPayment,
   createOfflineBooking,
   scanTicket,

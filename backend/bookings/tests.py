@@ -1,9 +1,13 @@
+import base64
+import json
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core import mail
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -12,11 +16,13 @@ from rest_framework.test import APITestCase
 from events.models import Category, Event
 
 from .models import Booking, Payment, Ticket
+from .services import build_esewa_payload, generate_esewa_signature, verify_esewa_payment
 
 
 User = get_user_model()
 
 
+@override_settings(PAYMENT_PROVIDER='MOCK')
 class BookingWorkflowTests(APITestCase):
     def setUp(self):
         self.organizer = User.objects.create_user(
@@ -119,6 +125,59 @@ class BookingWorkflowTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+    )
+    def test_confirmed_booking_can_resend_ticket_email(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+            confirmed_at=timezone.now(),
+        )
+        ticket = Ticket.objects.create(booking=booking)
+        mail.outbox = []
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-send-ticket-email', args=[booking.id]),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], self.attendee.email)
+        self.assertEqual(response.data['ticket_code'], ticket.ticket_code)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.attendee.email])
+        self.assertEqual(len(mail.outbox[0].attachments), 1)
+
+    def test_pending_booking_cannot_resend_ticket_email(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-send-ticket-email', args=[booking.id]),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Only confirmed bookings', str(response.data))
 
     def test_payment_initiation_blocks_full_event(self):
         sold_out_event = Event.objects.create(
@@ -256,6 +315,37 @@ class BookingWorkflowTests(APITestCase):
         booking = Booking.objects.first()
         self.assertFalse(Ticket.objects.filter(booking=booking).exists())
 
+    @override_settings(
+        PAYMENT_PROVIDER='ESEWA',
+        ESEWA_PRODUCT_CODE='EPAYTEST',
+        ESEWA_SECRET_KEY='8gBm/:&EnhH.1/q',
+        ESEWA_FORM_URL='https://rc-epay.esewa.com.np/api/epay/main/v2/form',
+        ESEWA_STATUS_URL='https://rc.esewa.com.np/api/epay/transaction/status/',
+        BACKEND_BASE_URL='http://127.0.0.1:8000',
+    )
+    def test_payment_initiation_returns_esewa_checkout_payload_when_enabled(self):
+        self.client.force_authenticate(user=self.attendee)
+
+        response = self.client.post(
+            reverse('payment_initiate'),
+            {'event': str(self.event.id)},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['next_action'], 'REDIRECT_TO_ESEWA')
+        self.assertEqual(response.data['payment']['provider'], Payment.PROVIDER_ESEWA)
+        self.assertEqual(response.data['payment']['currency'], 'NPR')
+        self.assertEqual(
+            response.data['payment']['checkout_url'],
+            'https://rc-epay.esewa.com.np/api/epay/main/v2/form',
+        )
+        self.assertIsNotNone(response.data['payment']['form_fields'])
+        self.assertEqual(
+            response.data['payment']['form_fields']['transaction_uuid'],
+            response.data['payment']['id'],
+        )
+
     def test_payments_initiate_endpoint_alias_creates_pending_payment(self):
         self.client.force_authenticate(user=self.attendee)
 
@@ -317,6 +407,188 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(response.data['ticket_code'], ticket.ticket_code)
         self.assertEqual(len(mail.outbox), 1)
         self.assertTrue(mail.outbox[0].attachments)
+
+    @override_settings(
+        PAYMENT_PROVIDER='ESEWA',
+        ESEWA_PRODUCT_CODE='EPAYTEST',
+        ESEWA_SECRET_KEY='8gBm/:&EnhH.1/q',
+        ESEWA_FORM_URL='https://rc-epay.esewa.com.np/api/epay/main/v2/form',
+        ESEWA_STATUS_URL='https://rc.esewa.com.np/api/epay/transaction/status/',
+        BACKEND_BASE_URL='http://127.0.0.1:8000',
+    )
+    def test_payments_retry_creates_fresh_esewa_session(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-OLD',
+        )
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('payments_retry', args=[payment.id]),
+            format='json',
+        )
+
+        payment.refresh_from_db()
+        booking.refresh_from_db()
+        new_payment = Payment.objects.exclude(pk=payment.id).get(booking=booking)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['next_action'], 'REDIRECT_TO_ESEWA')
+        self.assertEqual(payment.status, Payment.STATUS_FAILED)
+        self.assertEqual(booking.status, Booking.STATUS_PENDING)
+        self.assertEqual(new_payment.provider, Payment.PROVIDER_ESEWA)
+        self.assertNotEqual(str(new_payment.id), str(payment.id))
+        self.assertEqual(response.data['payment']['id'], str(new_payment.id))
+
+    @override_settings(FRONTEND_BASE_URL='http://localhost:5173')
+    @patch('bookings.views.verify_esewa_payment')
+    def test_esewa_success_callback_confirms_booking_and_redirects_to_checkout(self, mock_verify_esewa_payment):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-CALLBACK-SUCCESS',
+        )
+        mock_verify_esewa_payment.return_value = {
+            'status': 'COMPLETE',
+            'transaction_code': 'ESEWA-TXN-123',
+        }
+        callback_payload = base64.b64encode(
+            json.dumps({'transaction_uuid': str(payment.id)}).encode('utf-8')
+        ).decode('utf-8')
+
+        response = self.client.get(
+            reverse('esewa_success', args=[payment.id]),
+            {
+                'data': callback_payload,
+            },
+        )
+
+        booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(
+            response['Location'],
+            f'http://localhost:5173/checkout/{payment.id}?gateway=esewa&status=success',
+        )
+        self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
+        self.assertEqual(payment.status, Payment.STATUS_SUCCESS)
+        self.assertEqual(payment.provider_reference, 'ESEWA-TXN-123')
+        self.assertTrue(Ticket.objects.filter(booking=booking).exists())
+
+    @override_settings(FRONTEND_BASE_URL='http://localhost:5173')
+    def test_esewa_failure_callback_marks_payment_failed_and_redirects_to_checkout(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-CALLBACK-FAIL',
+        )
+
+        response = self.client.get(
+            reverse('esewa_failure', args=[payment.id]),
+        )
+
+        booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(
+            response['Location'],
+            f'http://localhost:5173/checkout/{payment.id}?gateway=esewa&status=failed',
+        )
+        self.assertEqual(booking.status, Booking.STATUS_FAILED)
+        self.assertEqual(payment.status, Payment.STATUS_FAILED)
+
+    @override_settings(FRONTEND_BASE_URL='http://localhost:5173')
+    @patch('bookings.views.verify_esewa_payment')
+    def test_esewa_success_callback_recovers_legacy_query_string_format(self, mock_verify_esewa_payment):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-LEGACY-CALLBACK',
+        )
+        mock_verify_esewa_payment.return_value = {
+            'status': 'COMPLETE',
+            'transaction_code': 'ESEWA-TXN-LEGACY',
+        }
+        callback_payload = base64.b64encode(
+            json.dumps({'transaction_uuid': str(payment.id)}).encode('utf-8')
+        ).decode('utf-8')
+
+        response = self.client.get(
+            reverse('esewa_success_legacy'),
+            {
+                'payment_id': f'{payment.id}?data={callback_payload}',
+            },
+        )
+
+        booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
+        self.assertEqual(payment.status, Payment.STATUS_SUCCESS)
 
     def test_booking_confirm_raises_without_successful_payment(self):
         booking = Booking.objects.create(
@@ -527,3 +799,178 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
         self.assertTrue(ticket.is_scanned)
         self.assertEqual(second_response.status_code, status.HTTP_409_CONFLICT)
+
+
+class EsewaServiceTests(APITestCase):
+    @override_settings(
+        ESEWA_PRODUCT_CODE='EPAYTEST',
+        ESEWA_SECRET_KEY='8gBm/:&EnhH.1/q',
+        BACKEND_BASE_URL='http://127.0.0.1:8000',
+        ESEWA_STATUS_URL='https://rc.esewa.com.np/api/epay/transaction/status/',
+    )
+    def test_build_esewa_payload_contains_signed_fields(self):
+        user = User.objects.create_user(
+            email='esewa@example.com',
+            username='esewauser',
+            password='password123',
+        )
+        category = Category.objects.create(name='Concert')
+        event = Event.objects.create(
+            title='eSewa Test Event',
+            description='Concert',
+            date=timezone.now() + timedelta(days=5),
+            location='Arena',
+            category=category,
+            price=Decimal('100.00'),
+            capacity=50,
+            organizer=user,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=user,
+            event=event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('100.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('100.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=user,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('100.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-TEST',
+        )
+
+        payload = build_esewa_payload(payment)
+
+        self.assertEqual(payload['product_code'], 'EPAYTEST')
+        self.assertEqual(payload['transaction_uuid'], str(payment.id))
+        self.assertEqual(payload['total_amount'], '100.00')
+        self.assertEqual(payload['signed_field_names'], 'total_amount,transaction_uuid,product_code')
+        self.assertEqual(
+            payload['signature'],
+            generate_esewa_signature('100.00', str(payment.id), 'EPAYTEST'),
+        )
+        self.assertEqual(
+            payload['success_url'],
+            f'http://127.0.0.1:8000/api/payments/esewa/success/{payment.id}/',
+        )
+        self.assertEqual(
+            payload['failure_url'],
+            f'http://127.0.0.1:8000/api/payments/esewa/failure/{payment.id}/',
+        )
+
+    @override_settings(
+        ESEWA_PRODUCT_CODE='EPAYTEST',
+        ESEWA_STATUS_URL='https://rc.esewa.com.np/api/epay/transaction/status/',
+    )
+    @patch('bookings.services.urlopen')
+    def test_verify_esewa_payment_calls_status_api(self, mock_urlopen):
+        user = User.objects.create_user(
+            email='verify@example.com',
+            username='verifyuser',
+            password='password123',
+        )
+        category = Category.objects.create(name='Workshop')
+        event = Event.objects.create(
+            title='Verify Event',
+            description='Workshop',
+            date=timezone.now() + timedelta(days=4),
+            location='Lab',
+            category=category,
+            price=Decimal('80.00'),
+            capacity=40,
+            organizer=user,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=user,
+            event=event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('80.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('80.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=user,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('80.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-VERIFY',
+        )
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"status":"COMPLETE","total_amount":"80.00"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        payload = verify_esewa_payment(payment)
+
+        self.assertEqual(payload['status'], 'COMPLETE')
+        requested_url = mock_urlopen.call_args.args[0]
+        self.assertIn('product_code=EPAYTEST', requested_url)
+        self.assertIn(f'transaction_uuid={payment.id}', requested_url)
+        self.assertIn('total_amount=80.00', requested_url)
+
+    @override_settings(
+        ESEWA_PRODUCT_CODE='EPAYTEST',
+        ESEWA_STATUS_URL='https://rc.esewa.com.np/api/epay/transaction/status/',
+        ESEWA_VERIFY_SSL=False,
+    )
+    @patch('bookings.services.urlopen')
+    def test_verify_esewa_payment_uses_unverified_context_when_ssl_checks_are_disabled(self, mock_urlopen):
+        user = User.objects.create_user(
+            email='sslverify@example.com',
+            username='sslverify',
+            password='password123',
+        )
+        category = Category.objects.create(name='Talk')
+        event = Event.objects.create(
+            title='SSL Verify Event',
+            description='Talk',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall',
+            category=category,
+            price=Decimal('10.00'),
+            capacity=20,
+            organizer=user,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=user,
+            event=event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('10.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('10.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=user,
+            provider=Payment.PROVIDER_ESEWA,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('10.00'),
+            currency='NPR',
+            external_reference='PAY-ESEWA-SSL-CONTEXT',
+        )
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"status":"COMPLETE","total_amount":"10.00"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        verify_esewa_payment(payment)
+
+        self.assertIsNotNone(mock_urlopen.call_args.kwargs['context'])

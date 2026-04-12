@@ -18,6 +18,7 @@ import EventLocationMap from '../components/EventLocationMap';
 import authService from '../services/authService';
 import bookingService from '../services/bookingService';
 import eventService from '../services/eventService';
+import { formatNpr } from '../utils/currency';
 
 
 function EventDetail() {
@@ -324,7 +325,7 @@ function EventDetail() {
               <div className="flex items-center justify-between mb-6">
                 <span className="text-gray-500 font-medium">Ticket Price</span>
                 <span className="text-3xl font-bold text-indigo-600">
-                  {event.price > 0 ? `$${event.price}` : 'Free'}
+                  {formatNpr(event.price, { allowFree: true })}
                 </span>
               </div>
 
@@ -371,7 +372,7 @@ function EventDetail() {
               )}
 
               <p className="text-center text-xs text-gray-400 mt-6 px-4">
-                Final payment amount, including any approved student discount, is shown during checkout.
+                Final payment amount in NRs, including any approved student discount, is shown during checkout.
               </p>
             </div>
           </div>

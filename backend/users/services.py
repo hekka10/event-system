@@ -1,8 +1,10 @@
 import json
+import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import certifi
 from django.conf import settings
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -37,9 +39,10 @@ def verify_google_id_token(id_token):
         f"{GOOGLE_TOKENINFO_URL}?{query}",
         headers={"Accept": "application/json"},
     )
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
 
     try:
-        with urlopen(request, timeout=10) as response:
+        with urlopen(request, timeout=10, context=ssl_context) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         raise ValidationError(
