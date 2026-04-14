@@ -168,8 +168,6 @@ EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend',
 )
-if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
-    EMAIL_BACKEND = 'event_system_backend.email_backend.CertifiEmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '1025'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
@@ -214,21 +212,9 @@ SIMPLE_JWT = {
 }
 
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173')
-BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'http://127.0.0.1:8000')
 GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '')
 PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'mock').upper()
 PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', 'dev-webhook-secret')
-ESEWA_PRODUCT_CODE = os.getenv('ESEWA_PRODUCT_CODE', '')
-ESEWA_SECRET_KEY = os.getenv('ESEWA_SECRET_KEY', '')
-ESEWA_FORM_URL = os.getenv(
-    'ESEWA_FORM_URL',
-    'https://rc-epay.esewa.com.np/api/epay/main/v2/form',
-)
-ESEWA_STATUS_URL = os.getenv(
-    'ESEWA_STATUS_URL',
-    'https://rc.esewa.com.np/api/epay/transaction/status/',
-)
-ESEWA_VERIFY_SSL = env_bool('ESEWA_VERIFY_SSL', not DEBUG)
 STUDENT_DISCOUNT_PERCENT = int(os.getenv('STUDENT_DISCOUNT_PERCENT', '20'))
 
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', DEBUG)
