@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import eventService from '../services/eventService';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 import { Camera, Save, X, Loader2, AlertCircle } from 'lucide-react';
 import LocationPicker from '../components/LocationPicker';
 
@@ -78,8 +78,7 @@ function EventForm() {
     const { id } = useParams();
     const isEditMode = !!id;
     const navigate = useNavigate();
-    const user = authService.getCurrentUser();
-    const token = user?.access || user?.token || '';
+    const { token } = useAuth();
 
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(false);

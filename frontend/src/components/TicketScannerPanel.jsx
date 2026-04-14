@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { CheckCircle2, Loader2, QrCode, ScanLine, XCircle } from 'lucide-react';
 
-import authService from '../services/authService';
 import bookingService from '../services/bookingService';
+import useAuth from '../hooks/useAuth';
 
 
 function TicketScannerPanel({ onSuccess }) {
@@ -10,7 +10,7 @@ function TicketScannerPanel({ onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-  const user = authService.getCurrentUser();
+  const { token } = useAuth();
 
   const runScan = async (markCheckedIn) => {
     setLoading(true);
@@ -23,7 +23,7 @@ function TicketScannerPanel({ onSuccess }) {
           ticket_code: ticketCode,
           mark_checked_in: markCheckedIn,
         },
-        user.access || user.token
+        token
       );
       setResult(data);
       onSuccess?.();

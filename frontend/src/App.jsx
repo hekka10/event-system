@@ -5,6 +5,7 @@ import AdminRoute from './components/AdminRoute';
 import Footer from './components/Footer';
 import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
+import useAuth from './hooks/useAuth';
 import authService from './services/authService';
 import AdminDashboard from './pages/AdminDashboard';
 import EventDetail from './pages/EventDetail';
@@ -19,15 +20,17 @@ import StudentVerification from './pages/StudentVerification';
 
 
 function App() {
+  const { isAuthenticated, token } = useAuth();
+
   useEffect(() => {
-    if (!authService.isAuthenticated()) {
+    if (!isAuthenticated) {
       return;
     }
 
-    authService.refreshProfile().catch(() => {
+    authService.refreshProfile(token).catch(() => {
       authService.logout();
     });
-  }, []);
+  }, [isAuthenticated, token]);
 
   return (
     <BrowserRouter>

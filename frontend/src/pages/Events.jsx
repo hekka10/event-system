@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
 import { Filter, Loader2, Sparkles } from 'lucide-react';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 
 function Events() {
   const [events, setEvents] = useState([]);
@@ -12,7 +12,7 @@ function Events() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
-  const user = authService.getCurrentUser();
+  const { user, token } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -36,7 +36,7 @@ function Events() {
     const loadEvents = async () => {
       setLoading(true);
       try {
-        const data = await eventService.getAllEvents(selectedCategory, user?.access || user?.token || '');
+        const data = await eventService.getAllEvents(selectedCategory, token || '');
         setEvents(data);
         setError(null);
       } catch {
@@ -47,12 +47,12 @@ function Events() {
     };
 
     loadEvents();
-  }, [selectedCategory, user?.access, user?.token]);
+  }, [selectedCategory, token]);
 
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const data = await eventService.getAllEvents(selectedCategory, user?.access || user?.token || '');
+      const data = await eventService.getAllEvents(selectedCategory, token || '');
       setEvents(data);
       setError(null);
     } catch {

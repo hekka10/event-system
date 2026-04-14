@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FileBadge2, Loader2, ShieldCheck, Upload } from 'lucide-react';
 
+import useAuth from '../hooks/useAuth';
 import authService from '../services/authService';
 import studentService from '../services/studentService';
 
@@ -27,8 +28,7 @@ const formatDateTime = (value) => {
 
 
 function StudentVerification() {
-  const user = authService.getCurrentUser();
-  const token = user?.access || user?.token;
+  const { token } = useAuth();
 
   const [formData, setFormData] = useState({
     student_email: '',

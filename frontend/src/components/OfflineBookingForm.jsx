@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, UserPlus } from 'lucide-react';
 
-import authService from '../services/authService';
 import bookingService from '../services/bookingService';
 import eventService from '../services/eventService';
+import useAuth from '../hooks/useAuth';
 import { formatNpr } from '../utils/currency';
 
 
@@ -12,7 +12,7 @@ function OfflineBookingForm({ onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState('');
-  const user = authService.getCurrentUser();
+  const { token } = useAuth();
 
   const [formData, setFormData] = useState({
     username: '',
@@ -24,7 +24,7 @@ function OfflineBookingForm({ onSuccess }) {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const data = await eventService.getAllEvents('', user?.access || user?.token || '');
+        const data = await eventService.getAllEvents('', token || '');
         setEvents(data.filter((event) => event.is_approved));
       } catch (fetchError) {
         setError(fetchError.message || 'Failed to load events.');
@@ -32,7 +32,7 @@ function OfflineBookingForm({ onSuccess }) {
     };
 
     fetchEvents();
-  }, [user]);
+  }, [token]);
 
   const handleChange = (event) => {
     setFormData((current) => ({
@@ -48,7 +48,7 @@ function OfflineBookingForm({ onSuccess }) {
     setSuccess('');
 
     try {
-      const response = await bookingService.createOfflineBooking(formData, user.access || user.token);
+      const response = await bookingService.createOfflineBooking(formData, token);
       setSuccess(
         `Walk-in confirmed for ${response.attendee_email}. Ticket code: ${response.ticket_code}`
       );

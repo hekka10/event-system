@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 
 import EventLocationMap from '../components/EventLocationMap';
-import authService from '../services/authService';
 import bookingService from '../services/bookingService';
+import useAuth from '../hooks/useAuth';
 import eventService from '../services/eventService';
 import { formatNpr } from '../utils/currency';
 
@@ -32,9 +32,7 @@ function EventDetail() {
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(location.state?.message || '');
-  const user = authService.getCurrentUser();
-  const token = user?.access || user?.token || '';
-  const isAdmin = authService.isAdmin(user);
+  const { user, token, isAdmin } = useAuth();
 
   useEffect(() => {
     setNotice(location.state?.message || '');

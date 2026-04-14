@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
 import RecommendedEventsSection from '../components/RecommendedEventsSection';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 import { Calendar, Users, ShieldCheck, ArrowRight, Zap, Loader2 } from 'lucide-react';
 
 function Home() {
@@ -11,8 +11,7 @@ function Home() {
   const [recommendedEvents, setRecommendedEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
-  const user = authService.getCurrentUser();
-  const token = user?.access || user?.token || '';
+  const { user, token } = useAuth();
 
   useEffect(() => {
     const fetchLatestEvents = async () => {

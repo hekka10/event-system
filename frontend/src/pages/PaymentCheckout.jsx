@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CreditCard, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 
 import bookingService from '../services/bookingService';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 import { formatNpr } from '../utils/currency';
 
 
@@ -11,8 +11,7 @@ function PaymentCheckout() {
   const { paymentId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const user = authService.getCurrentUser();
-  const token = user?.access || user?.token || '';
+  const { token } = useAuth();
   const esewaFormRef = useRef(null);
 
   const [payment, setPayment] = useState(null);

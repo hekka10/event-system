@@ -1,10 +1,9 @@
 import { Calendar, Mail, Github, Twitter, Instagram } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 
 function Footer() {
-  const user = authService.getCurrentUser();
-  const isAdmin = authService.isAdmin(user);
+  const { user, isAdmin } = useAuth();
 
   return (
     <footer className="bg-white border-t border-gray-100 pt-16 pb-8">

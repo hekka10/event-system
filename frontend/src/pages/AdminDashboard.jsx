@@ -15,9 +15,9 @@ import {
 
 import OfflineBookingForm from '../components/OfflineBookingForm';
 import TicketScannerPanel from '../components/TicketScannerPanel';
-import authService from '../services/authService';
 import adminService from '../services/adminService';
 import eventService from '../services/eventService';
+import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import { formatNpr } from '../utils/currency';
 
@@ -26,8 +26,7 @@ function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const user = authService.getCurrentUser();
-  const token = user?.access || user?.token || '';
+  const { token } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import bookingService from '../services/bookingService';
-import authService from '../services/authService';
+import useAuth from '../hooks/useAuth';
 import TicketPreviewCard from '../components/TicketPreviewCard';
 import { formatNpr } from '../utils/currency';
 import {
@@ -74,8 +74,7 @@ function MyBookings() {
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [expandedTicketBookingId, setExpandedTicketBookingId] = useState(null);
     const [emailingBookingId, setEmailingBookingId] = useState(null);
-    const user = authService.getCurrentUser();
-    const token = user?.access || user?.token || '';
+    const { token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 

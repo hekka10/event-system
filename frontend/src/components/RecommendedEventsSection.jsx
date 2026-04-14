@@ -1,8 +1,6 @@
 import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
 import EventCard from './EventCard';
-
 
 function RecommendedEventsSection({ events, loading }) {
   return (
@@ -46,6 +44,5 @@ function RecommendedEventsSection({ events, loading }) {
     </section>
   );
 }
-
 
 export default RecommendedEventsSection;

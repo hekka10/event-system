@@ -1,11 +1,12 @@
-import { Link, useNavigate } from "react-router-dom";
-import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket, BadgeCheck } from "lucide-react";
-import authService from "../services/authService";
+import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket, BadgeCheck } from 'lucide-react';
+
+import useAuth from '../hooks/useAuth';
+import authService from '../services/authService';
 
 function Header() {
   const navigate = useNavigate();
-  const user = authService.getCurrentUser();
-  const isAdmin = authService.isAdmin(user);
+  const { user, isAdmin } = useAuth();
 
   const handleLogout = () => {
     authService.logout();

@@ -1,6 +1,7 @@
 import { getAuthHeaders, request } from './api';
 
 const STORAGE_KEY = 'user';
+const listeners = new Set();
 
 const normalizeUser = (data) => {
   if (!data) {
@@ -14,9 +15,39 @@ const normalizeUser = (data) => {
   };
 };
 
+const readStoredUser = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? normalizeUser(JSON.parse(stored)) : null;
+  } catch {
+    return null;
+  }
+};
+
+let currentUser = readStoredUser();
+
+const notifyAuthChange = () => {
+  listeners.forEach((listener) => listener());
+};
+
 const storeUser = (user) => {
   const normalized = normalizeUser(user);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+
+  currentUser = normalized;
+
+  if (typeof window !== 'undefined') {
+    if (normalized) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+
+  notifyAuthChange();
   return normalized;
 };
 
@@ -68,20 +99,39 @@ const loginWithGoogle = async (payload) => {
   return storeUser(data);
 };
 
-const getCurrentUser = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? normalizeUser(JSON.parse(stored)) : null;
-  } catch {
-    return null;
-  }
-};
+const getCurrentUser = () => currentUser;
 
 const getAccessToken = () => getCurrentUser()?.access || null;
 
 const isAuthenticated = () => Boolean(getAccessToken());
 
 const isAdmin = (user = getCurrentUser()) => Boolean(user?.is_staff || user?.is_superuser);
+
+const subscribe = (listener) => {
+  listeners.add(listener);
+
+  if (typeof window === 'undefined') {
+    return () => {
+      listeners.delete(listener);
+    };
+  }
+
+  const handleStorage = (event) => {
+    if (event.key && event.key !== STORAGE_KEY) {
+      return;
+    }
+
+    currentUser = readStoredUser();
+    listener();
+  };
+
+  window.addEventListener('storage', handleStorage);
+
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener('storage', handleStorage);
+  };
+};
 
 const refreshProfile = async (token = getAccessToken()) => {
   if (!token) {
@@ -110,7 +160,13 @@ const refreshProfile = async (token = getAccessToken()) => {
 };
 
 const logout = () => {
-  localStorage.removeItem(STORAGE_KEY);
+  currentUser = null;
+
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  notifyAuthChange();
 };
 
 const authService = {
@@ -122,6 +178,7 @@ const authService = {
   getAccessToken,
   isAuthenticated,
   isAdmin,
+  subscribe,
   refreshProfile,
   storeUser,
 };
