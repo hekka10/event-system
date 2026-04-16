@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { FileBadge2, Loader2, ShieldCheck, Upload } from 'lucide-react';
 
+import AlertMessage from '../components/AlertMessage';
 import useAuth from '../hooks/useAuth';
 import authService from '../services/authService';
 import studentService from '../services/studentService';
+import { formatDateTime } from '../utils/date';
 
 
 const statusStyles = {
@@ -11,21 +13,6 @@ const statusStyles = {
   PENDING: 'bg-amber-100 text-amber-700',
   REJECTED: 'bg-red-100 text-red-700',
 };
-
-const formatDateTime = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  return new Date(value).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
 
 function StudentVerification() {
   const { token } = useAuth();
@@ -134,7 +121,7 @@ function StudentVerification() {
                 </div>
                 {verification.verified_at && (
                   <p className="mt-3 text-sm text-emerald-700 font-medium">
-                    Verified on {formatDateTime(verification.verified_at)}
+                    Verified on {formatDateTime(verification.verified_at, { fallback: '' })}
                   </p>
                 )}
               </div>
@@ -142,13 +129,13 @@ function StudentVerification() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            {error && <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl">{error}</div>}
-            {success && <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-2xl">{success}</div>}
+            {error && <AlertMessage variant="error">{error}</AlertMessage>}
+            {success && <AlertMessage variant="success">{success}</AlertMessage>}
 
             {verification?.rejection_reason && (
-              <div className="bg-amber-50 border border-amber-100 text-amber-700 p-4 rounded-2xl">
+              <AlertMessage variant="warning">
                 Rejection reason: {verification.rejection_reason}
-              </div>
+              </AlertMessage>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

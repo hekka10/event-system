@@ -10,13 +10,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import StudentVerification
 from .serializers import (
     GoogleOAuthSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RegisterSerializer,
     StudentVerificationApproveRequestSerializer,
     StudentVerificationReviewSerializer,
     StudentVerificationSerializer,
     UserSerializer,
 )
-from .services import build_auth_response, verify_google_id_token
+from .services import build_auth_response, send_password_reset_email, verify_google_id_token
 
 
 User = get_user_model()
@@ -126,6 +128,43 @@ class UserProfileView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = User.objects.filter(
+            email=serializer.validated_data['email'],
+            is_active=True,
+        ).first()
+        if user and user.has_usable_password():
+            send_password_reset_email(user)
+
+        return Response(
+            {'message': 'If an account with that email exists, we sent a password reset link.'},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.validated_data['user']
+        user.set_password(serializer.validated_data['password'])
+        user.save(update_fields=['password'])
+
+        return Response(
+            {'message': 'Password updated successfully. You can log in now.'},
+            status=status.HTTP_200_OK,
+        )
 
 
 class StudentVerificationSubmissionView(APIView):

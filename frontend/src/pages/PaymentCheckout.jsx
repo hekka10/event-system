@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CreditCard, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 
+import AlertMessage from '../components/AlertMessage';
 import bookingService from '../services/bookingService';
 import useAuth from '../hooks/useAuth';
 import { formatNpr } from '../utils/currency';
@@ -176,21 +177,21 @@ function PaymentCheckout() {
 
           <div className="p-8">
             {notice && (
-              <div className="mb-6 bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-2xl">
+              <AlertMessage variant="success" className="mb-6">
                 {notice}
-              </div>
+              </AlertMessage>
             )}
 
             {callbackError && (
-              <div className="mb-6 bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl">
+              <AlertMessage variant="error" className="mb-6">
                 {callbackError}
-              </div>
+              </AlertMessage>
             )}
 
             {error && (
-              <div className="mb-6 bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl">
+              <AlertMessage variant="error" className="mb-6">
                 {error}
-              </div>
+              </AlertMessage>
             )}
 
             <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 mb-8">

@@ -121,9 +121,30 @@ def build_checkout_url(payment):
     return build_absolute_frontend_url(f'/checkout/{payment.id}')
 
 
+def get_missing_esewa_settings():
+    required_settings = [
+        'ESEWA_PRODUCT_CODE',
+        'ESEWA_SECRET_KEY',
+        'ESEWA_FORM_URL',
+        'ESEWA_STATUS_URL',
+    ]
+    return [
+        setting_name
+        for setting_name in required_settings
+        if not str(getattr(settings, setting_name, '')).strip()
+    ]
+
+
 def get_online_payment_provider():
     provider = getattr(settings, 'PAYMENT_PROVIDER', Payment.PROVIDER_MOCK).upper()
     if provider == Payment.PROVIDER_ESEWA:
+        missing_settings = get_missing_esewa_settings()
+        if missing_settings:
+            logger.warning(
+                'PAYMENT_PROVIDER is ESEWA but missing config for %s. Falling back to MOCK.',
+                ', '.join(missing_settings),
+            )
+            return Payment.PROVIDER_MOCK
         return Payment.PROVIDER_ESEWA
     return Payment.PROVIDER_MOCK
 
@@ -449,6 +470,16 @@ def send_booking_confirmation_email(booking, ticket=None, fail_silently=True):
     ticket = ticket or getattr(booking, 'ticket', None)
     if ticket is None:
         ticket = booking.ticket
+
+    qr_name = ticket.qr_code.name if ticket.qr_code else ''
+    if not qr_name or not ticket.qr_code.storage.exists(qr_name):
+        if qr_name:
+            logger.warning(
+                "QR code file missing for ticket %s; regenerating before email send.",
+                ticket.ticket_code,
+            )
+        ticket.generate_qr()
+        ticket.save(update_fields=['qr_code'])
 
     frontend_base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
     booking_url = f"{frontend_base_url}/my-bookings"

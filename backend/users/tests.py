@@ -3,9 +3,14 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -79,6 +84,82 @@ class UserFeatureTests(APITestCase):
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
         self.assertEqual(response.data['email'], 'student@example.com')
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+        FRONTEND_BASE_URL='http://localhost:5173',
+    )
+    def test_password_reset_request_sends_email_for_existing_email_user(self):
+        mail.outbox = []
+
+        response = self.client.post(
+            reverse('password_reset_request'),
+            {'email': '  STUDENT@EXAMPLE.COM  '},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.user.email])
+        self.assertIn('If an account with that email exists', response.data['message'])
+        self.assertIn(
+            f"/reset-password/{urlsafe_base64_encode(force_bytes(self.user.pk))}/",
+            mail.outbox[0].body,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+    )
+    def test_password_reset_request_is_generic_for_unknown_email(self):
+        mail.outbox = []
+
+        response = self.client.post(
+            reverse('password_reset_request'),
+            {'email': 'missing@example.com'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIn('If an account with that email exists', response.data['message'])
+
+    def test_password_reset_confirm_updates_password_with_valid_token(self):
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        token = default_token_generator.make_token(self.user)
+
+        response = self.client.post(
+            reverse('password_reset_confirm'),
+            {
+                'uid': uid,
+                'token': token,
+                'password': 'NewStrongPassword123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewStrongPassword123'))
+
+    def test_password_reset_confirm_rejects_invalid_token(self):
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+
+        response = self.client.post(
+            reverse('password_reset_confirm'),
+            {
+                'uid': uid,
+                'token': 'invalid-token',
+                'password': 'NewStrongPassword123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('invalid or has expired', str(response.data['detail']))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('password123'))
 
     def test_profile_endpoint_requires_authentication(self):
         unauthenticated_response = self.client.get(reverse('me'))

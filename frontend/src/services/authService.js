@@ -99,6 +99,32 @@ const loginWithGoogle = async (payload) => {
   return storeUser(data);
 };
 
+const requestPasswordReset = async (email) =>
+  request(
+    '/auth/password-reset/request/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    },
+    'Failed to send password reset email'
+  );
+
+const resetPassword = async (payload) =>
+  request(
+    '/auth/password-reset/confirm/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    'Password reset failed'
+  );
+
 const getCurrentUser = () => currentUser;
 
 const getAccessToken = () => getCurrentUser()?.access || null;
@@ -173,6 +199,8 @@ const authService = {
   register,
   login,
   loginWithGoogle,
+  requestPasswordReset,
+  resetPassword,
   logout,
   getCurrentUser,
   getAccessToken,

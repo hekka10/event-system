@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus } from 'lucide-react';
 
+import AlertMessage from './AlertMessage';
 import bookingService from '../services/bookingService';
 import eventService from '../services/eventService';
 import useAuth from '../hooks/useAuth';
@@ -70,17 +71,15 @@ function OfflineBookingForm({ onSuccess }) {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {success && (
-          <div className="bg-green-50 border border-green-100 text-green-600 p-3 rounded-xl flex items-center gap-2 text-sm italic">
-            <CheckCircle2 className="w-4 h-4" />
+          <AlertMessage variant="success" size="compact" showIcon className="italic">
             {success}
-          </div>
+          </AlertMessage>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl flex items-center gap-2 text-sm italic">
-            <AlertCircle className="w-4 h-4" />
+          <AlertMessage variant="error" size="compact" showIcon className="italic">
             {error}
-          </div>
+          </AlertMessage>
         )}
 
         <div className="space-y-1">

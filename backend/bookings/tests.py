@@ -1,5 +1,7 @@
 import base64
 import json
+import os
+import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -158,6 +160,45 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(mail.outbox[0].to, [self.attendee.email])
         self.assertEqual(len(mail.outbox[0].attachments), 1)
 
+    def test_confirmed_booking_resend_ticket_email_regenerates_missing_qr_file(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(
+                EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+                DEFAULT_FROM_EMAIL='no-reply@test.com',
+                MEDIA_ROOT=media_root,
+            ):
+                booking = Booking.objects.create(
+                    user=self.attendee,
+                    event=self.event,
+                    status=Booking.STATUS_CONFIRMED,
+                    booking_source=Booking.SOURCE_ONLINE,
+                    is_student=False,
+                    base_price=Decimal('50.00'),
+                    discount_amount=Decimal('0.00'),
+                    total_price=Decimal('50.00'),
+                    confirmed_at=timezone.now(),
+                )
+                ticket = Ticket.objects.create(booking=booking)
+                missing_qr_name = ticket.qr_code.name
+
+                os.remove(ticket.qr_code.path)
+                self.assertFalse(ticket.qr_code.storage.exists(missing_qr_name))
+
+                mail.outbox = []
+                self.client.force_authenticate(user=self.attendee)
+                response = self.client.post(
+                    reverse('booking-send-ticket-email', args=[booking.id]),
+                    format='json',
+                )
+
+                ticket.refresh_from_db()
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertTrue(ticket.qr_code.storage.exists(ticket.qr_code.name))
+                self.assertEqual(ticket.qr_code.name, missing_qr_name)
+                self.assertEqual(len(mail.outbox), 1)
+                self.assertEqual(len(mail.outbox[0].attachments), 1)
+
     def test_pending_booking_cannot_resend_ticket_email(self):
         booking = Booking.objects.create(
             user=self.attendee,
@@ -314,6 +355,27 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(Payment.objects.first().status, Payment.STATUS_INITIATED)
         booking = Booking.objects.first()
         self.assertFalse(Ticket.objects.filter(booking=booking).exists())
+
+    @override_settings(
+        PAYMENT_PROVIDER='ESEWA',
+        ESEWA_PRODUCT_CODE='',
+        ESEWA_SECRET_KEY='',
+        ESEWA_FORM_URL='',
+        ESEWA_STATUS_URL='',
+    )
+    def test_payment_initiation_falls_back_to_mock_when_esewa_config_is_missing(self):
+        self.client.force_authenticate(user=self.attendee)
+
+        response = self.client.post(
+            reverse('payment_initiate'),
+            {'event': str(self.event.id)},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['next_action'], 'COMPLETE_PAYMENT')
+        self.assertEqual(response.data['payment']['provider'], Payment.PROVIDER_MOCK)
+        self.assertTrue(response.data['payment']['checkout_url'].endswith(f"/checkout/{response.data['payment']['id']}"))
 
     @override_settings(
         PAYMENT_PROVIDER='ESEWA',

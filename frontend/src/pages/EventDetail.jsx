@@ -14,11 +14,13 @@ import {
   Users,
 } from 'lucide-react';
 
+import AlertMessage from '../components/AlertMessage';
 import EventLocationMap from '../components/EventLocationMap';
 import bookingService from '../services/bookingService';
 import useAuth from '../hooks/useAuth';
 import eventService from '../services/eventService';
 import { formatNpr } from '../utils/currency';
+import { formatDateTime } from '../utils/date';
 
 
 function EventDetail() {
@@ -148,13 +150,15 @@ function EventDetail() {
     );
   }
 
-  const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  const formattedDate = formatDateTime(event.date, {
+    options: {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
   });
   const googleMapsLink = event.google_maps_link || event.parking_map_url;
   const canManageEvent = Boolean(user && (isAdmin || user.id === event.organizer));
@@ -223,15 +227,15 @@ function EventDetail() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
         {notice && (
-          <div className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+          <AlertMessage variant="success" className="mb-6 font-medium">
             {notice}
-          </div>
+          </AlertMessage>
         )}
 
         {actionError && (
-          <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+          <AlertMessage variant="error" className="mb-6 font-medium">
             {actionError}
-          </div>
+          </AlertMessage>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">

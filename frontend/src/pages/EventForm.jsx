@@ -1,19 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import AlertMessage from '../components/AlertMessage';
 import eventService from '../services/eventService';
 import useAuth from '../hooks/useAuth';
-import { Camera, Save, X, Loader2, AlertCircle } from 'lucide-react';
+import { Camera, Save, X, Loader2 } from 'lucide-react';
 import LocationPicker from '../components/LocationPicker';
-
-const getLocalDateTimeValue = (value) => {
-    if (!value) {
-        return '';
-    }
-
-    const date = new Date(value);
-    const timezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-};
+import { toLocalDateTimeInputValue } from '../utils/date';
 
 const validateFormData = (formData) => {
     const nextErrors = {};
@@ -124,7 +116,7 @@ function EventForm() {
                 setFormData({
                     title: data.title,
                     description: data.description,
-                    date: getLocalDateTimeValue(data.date),
+                    date: toLocalDateTimeInputValue(data.date),
                     location: data.location,
                     parking_info: data.parking_info || '',
                     google_maps_link: data.google_maps_link || data.parking_map_url || '',
@@ -259,10 +251,9 @@ function EventForm() {
 
                     <form onSubmit={handleSubmit} className="p-8 space-y-6">
                         {error && (
-                            <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-center gap-3 text-sm">
-                                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                                <p>{error}</p>
-                            </div>
+                            <AlertMessage variant="error" size="compact" showIcon>
+                                {error}
+                            </AlertMessage>
                         )}
 
                         {/* Image Upload */}

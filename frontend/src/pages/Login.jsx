@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import AlertMessage from '../components/AlertMessage';
 import authService from '../services/authService';
 import { Mail, Lock, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 import GoogleSignInButton from '../components/GoogleSignInButton';
@@ -16,6 +17,7 @@ function Login() {
     const navigate = useNavigate();
     const location = useLocation();
     const redirectTo = location.state?.from?.pathname || '/';
+    const notice = location.state?.message || '';
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -48,10 +50,16 @@ function Login() {
                     </div>
 
                     <form className="space-y-6" onSubmit={handleSubmit}>
+                        {notice && (
+                            <AlertMessage variant="success" centered>
+                                {notice}
+                            </AlertMessage>
+                        )}
+
                         {error && (
-                            <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-sm italic text-center">
+                            <AlertMessage variant="error" centered className="italic">
                                 {error}
-                            </div>
+                            </AlertMessage>
                         )}
 
                         <div className="space-y-4">
@@ -78,6 +86,14 @@ function Login() {
                                     value={formData.password}
                                     onChange={handleChange}
                                 />
+                            </div>
+                            <div className="flex justify-end">
+                                <Link
+                                    to="/forgot-password"
+                                    className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
+                                >
+                                    Forgot password?
+                                </Link>
                             </div>
                         </div>
 

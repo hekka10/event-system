@@ -1,5 +1,8 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.password_validation import validate_password
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 
 from .models import StudentVerification
@@ -71,6 +74,37 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class GoogleOAuthSerializer(serializers.Serializer):
     id_token = serializers.CharField()
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, attrs):
+        try:
+            user_id = force_str(urlsafe_base64_decode(attrs['uid']))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError(
+                {'detail': 'This password reset link is invalid or has expired.'}
+            )
+
+        if not default_token_generator.check_token(user, attrs['token']):
+            raise serializers.ValidationError(
+                {'detail': 'This password reset link is invalid or has expired.'}
+            )
+
+        validate_password(attrs['password'], user=user)
+        attrs['user'] = user
+        return attrs
 
 
 class StudentVerificationSerializer(serializers.ModelSerializer):

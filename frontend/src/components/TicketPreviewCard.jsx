@@ -1,19 +1,5 @@
 import { Calendar, CheckCircle2, Download, MapPin, QrCode, ScanLine, Ticket } from 'lucide-react';
-
-
-const formatDateTime = (value) => {
-  if (!value) {
-    return 'Not available';
-  }
-
-  return new Date(value).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+import { formatDateTime } from '../utils/date';
 
 
 function TicketPreviewCard({ booking }) {

@@ -11,10 +11,12 @@ import AdminDashboard from './pages/AdminDashboard';
 import EventDetail from './pages/EventDetail';
 import EventForm from './pages/EventForm';
 import Events from './pages/Events';
+import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import MyBookings from './pages/MyBookings';
 import PaymentCheckout from './pages/PaymentCheckout';
+import ResetPassword from './pages/ResetPassword';
 import Signup from './pages/Signup';
 import StudentVerification from './pages/StudentVerification';
 
@@ -41,6 +43,8 @@ function App() {
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
           <Route path="/signup" element={<Signup />} />
 
           <Route element={<ProtectedRoute />}>

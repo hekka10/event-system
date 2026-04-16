@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 
+import AlertMessage from '../components/AlertMessage';
 import OfflineBookingForm from '../components/OfflineBookingForm';
 import TicketScannerPanel from '../components/TicketScannerPanel';
 import adminService from '../services/adminService';
@@ -20,6 +21,7 @@ import eventService from '../services/eventService';
 import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import { formatNpr } from '../utils/currency';
+import { formatDateTime } from '../utils/date';
 
 
 function AdminDashboard() {
@@ -102,14 +104,6 @@ function AdminDashboard() {
     );
   }
 
-  const formatDateTime = (value) => new Date(value).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
   const bookingStatusClasses = {
     CONFIRMED: 'bg-emerald-100 text-emerald-700',
     PENDING: 'bg-amber-100 text-amber-700',
@@ -141,10 +135,18 @@ function AdminDashboard() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 p-6 rounded-2xl text-center mb-8">
-            <p>{error}</p>
-            <button onClick={fetchStats} className="mt-2 font-bold underline">Try again</button>
-          </div>
+          <AlertMessage
+            variant="error"
+            centered
+            className="mb-8 p-6"
+            actions={(
+              <button onClick={fetchStats} className="font-bold underline">
+                Try again
+              </button>
+            )}
+          >
+            {error}
+          </AlertMessage>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">

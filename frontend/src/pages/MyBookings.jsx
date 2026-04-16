@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import AlertMessage from '../components/AlertMessage';
 import bookingService from '../services/bookingService';
 import useAuth from '../hooks/useAuth';
 import TicketPreviewCard from '../components/TicketPreviewCard';
 import { formatNpr } from '../utils/currency';
+import { formatDateTime } from '../utils/date';
 import {
     ArrowRight,
     Calendar,
@@ -21,20 +23,6 @@ import {
 } from 'lucide-react';
 
 const STATUS_FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'FAILED'];
-
-const formatDateTime = (value) => {
-    if (!value) {
-        return 'Not available';
-    }
-
-    return new Date(value).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-};
 
 const formatPrice = (value) => formatNpr(value);
 
@@ -164,16 +152,24 @@ function MyBookings() {
                 </div>
 
                 {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 p-6 rounded-2xl text-center mb-8">
-                        <p>{error}</p>
-                        <button onClick={fetchBookings} className="mt-2 font-bold underline">Try again</button>
-                    </div>
+                    <AlertMessage
+                        variant="error"
+                        centered
+                        className="mb-8 p-6"
+                        actions={(
+                            <button onClick={fetchBookings} className="font-bold underline">
+                                Try again
+                            </button>
+                        )}
+                    >
+                        {error}
+                    </AlertMessage>
                 )}
 
                 {notice && (
-                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-6 rounded-2xl text-center mb-8">
-                        <p>{notice}</p>
-                    </div>
+                    <AlertMessage variant="success" centered className="mb-8 p-6">
+                        {notice}
+                    </AlertMessage>
                 )}
 
                 {bookings.length > 0 && (

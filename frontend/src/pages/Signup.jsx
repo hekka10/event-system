@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import AlertMessage from '../components/AlertMessage';
 import authService from '../services/authService';
 import { Mail, Lock, User, Loader2, ArrowRight, Sparkles } from 'lucide-react';
 import GoogleSignInButton from '../components/GoogleSignInButton';
@@ -50,9 +51,9 @@ function Signup() {
 
                     <form className="space-y-6" onSubmit={handleSubmit}>
                         {error && (
-                            <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-sm italic text-center">
+                            <AlertMessage variant="error" centered className="italic">
                                 {error}
-                            </div>
+                            </AlertMessage>
                         )}
 
                         <div className="space-y-4">

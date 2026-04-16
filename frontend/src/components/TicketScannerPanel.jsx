@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { CheckCircle2, Loader2, QrCode, ScanLine, XCircle } from 'lucide-react';
+import { Loader2, QrCode, ScanLine } from 'lucide-react';
 
+import AlertMessage from './AlertMessage';
 import bookingService from '../services/bookingService';
 import useAuth from '../hooks/useAuth';
 
@@ -77,22 +78,19 @@ function TicketScannerPanel({ onSuccess }) {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-sm flex items-start gap-2">
-            <XCircle className="w-4 h-4 mt-0.5" />
-            <span>{error}</span>
-          </div>
+          <AlertMessage variant="error" size="compact" showIcon>
+            {error}
+          </AlertMessage>
         )}
 
         {result && (
-          <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-xl text-sm">
-            <div className="flex items-center gap-2 font-semibold mb-2">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{result.message}</span>
+          <AlertMessage variant="success" size="compact" showIcon title={result.message}>
+            <div className="space-y-1">
+              <p>Attendee: {result.booking.user_email}</p>
+              <p>Event: {result.booking.event_details.title}</p>
+              <p>Ticket: {result.ticket.ticket_code}</p>
             </div>
-            <p>Attendee: {result.booking.user_email}</p>
-            <p>Event: {result.booking.event_details.title}</p>
-            <p>Ticket: {result.ticket.ticket_code}</p>
-          </div>
+          </AlertMessage>
         )}
       </div>
     </div>

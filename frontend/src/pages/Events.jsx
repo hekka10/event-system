@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import AlertMessage from '../components/AlertMessage';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
 import { Filter, Loader2, Sparkles } from 'lucide-react';
@@ -90,9 +91,9 @@ function Events() {
         </div>
 
         {notice && (
-          <div className="mb-8 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+          <AlertMessage variant="success" className="mb-8 font-medium">
             {notice}
-          </div>
+          </AlertMessage>
         )}
 
         {/* Filters Section */}
@@ -133,15 +134,21 @@ function Events() {
             <p className="text-gray-500 font-medium">Loading events...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-            <p className="text-red-600 font-medium">{error}</p>
-            <button
-              onClick={fetchEvents}
-              className="mt-4 text-indigo-600 font-semibold hover:text-indigo-700 underline"
-            >
-              Try again
-            </button>
-          </div>
+          <AlertMessage
+            variant="error"
+            centered
+            className="rounded-xl p-8"
+            actions={(
+              <button
+                onClick={fetchEvents}
+                className="font-semibold text-indigo-600 underline hover:text-indigo-700"
+              >
+                Try again
+              </button>
+            )}
+          >
+            <p className="font-medium">{error}</p>
+          </AlertMessage>
         ) : events.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {events.map((event) => (

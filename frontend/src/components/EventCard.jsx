@@ -1,14 +1,17 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Tag, Users } from 'lucide-react';
 
+import { formatDate } from '../utils/date';
 import { formatNpr } from '../utils/currency';
 
 const EventCard = ({ event }) => {
-    const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
+    const formattedDate = formatDate(event.date, {
+        options: {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        },
     });
 
     return (
