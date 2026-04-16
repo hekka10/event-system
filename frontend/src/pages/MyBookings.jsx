@@ -22,7 +22,7 @@ import {
     XCircle,
 } from 'lucide-react';
 
-const STATUS_FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'FAILED'];
+const STATUS_FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'CANCELLED', 'FAILED'];
 
 const formatPrice = (value) => formatNpr(value);
 
@@ -45,6 +45,14 @@ const getStatusMeta = (booking) => {
         };
     }
 
+    if (booking.status === 'CANCELLED') {
+        return {
+            label: 'Cancelled',
+            className: 'bg-slate-500 text-white',
+            description: 'This booking was cancelled. You can book the event again if seats are available.',
+        };
+    }
+
     return {
         label: 'Pending',
         className: 'bg-amber-500 text-white',
@@ -62,6 +70,7 @@ function MyBookings() {
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [expandedTicketBookingId, setExpandedTicketBookingId] = useState(null);
     const [emailingBookingId, setEmailingBookingId] = useState(null);
+    const [cancelingBookingId, setCancelingBookingId] = useState(null);
     const { token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -122,6 +131,35 @@ function MyBookings() {
             setError(sendError.message || 'Failed to send ticket email.');
         } finally {
             setEmailingBookingId(null);
+        }
+    };
+
+    const handleCancelBooking = async (booking) => {
+        const confirmationMessage = booking.status === 'CONFIRMED'
+            ? 'Cancel this confirmed booking? Your ticket will no longer be valid for entry.'
+            : 'Cancel this booking?';
+
+        if (!window.confirm(confirmationMessage)) {
+            return;
+        }
+
+        setCancelingBookingId(booking.id);
+        setError(null);
+        setNotice('');
+
+        try {
+            const response = await bookingService.cancelBooking(booking.id, token);
+            setBookings((currentBookings) => currentBookings.map((currentBooking) => (
+                currentBooking.id === booking.id ? response.booking : currentBooking
+            )));
+            setExpandedTicketBookingId((currentId) => (
+                currentId === booking.id ? null : currentId
+            ));
+            setNotice(response.message || 'Booking cancelled successfully.');
+        } catch (cancelError) {
+            setError(cancelError.message || 'Failed to cancel booking.');
+        } finally {
+            setCancelingBookingId(null);
         }
     };
 
@@ -298,7 +336,7 @@ function MyBookings() {
 
                                     <div className="pt-6 border-t border-gray-50 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                                         <div className="flex flex-wrap items-center gap-3">
-                                            {booking.ticket && (
+                                            {booking.ticket && booking.status === 'CONFIRMED' && (
                                                 <button
                                                     type="button"
                                                     onClick={() => setExpandedTicketBookingId((currentId) => (
@@ -325,6 +363,21 @@ function MyBookings() {
                                                     {emailingBookingId === booking.id ? 'Sending Email...' : 'Send Ticket Email'}
                                                 </button>
                                             )}
+                                            {booking.can_cancel && (
+                                                <button
+                                                    type="button"
+                                                    disabled={cancelingBookingId === booking.id}
+                                                    onClick={() => handleCancelBooking(booking)}
+                                                    className="flex items-center gap-2 text-sm font-semibold text-rose-700 bg-rose-50 px-4 py-2 rounded-lg hover:bg-rose-100 transition-colors disabled:opacity-60"
+                                                >
+                                                    {cancelingBookingId === booking.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <XCircle className="w-4 h-4" />
+                                                    )}
+                                                    {cancelingBookingId === booking.id ? 'Cancelling...' : 'Cancel Booking'}
+                                                </button>
+                                            )}
                                             {booking.ticket?.is_scanned && (
                                                 <span className="flex items-center gap-2 text-sm font-semibold text-indigo-700 bg-indigo-50 px-4 py-2 rounded-lg">
                                                     <CheckCircle2 className="w-4 h-4" />
@@ -340,7 +393,7 @@ function MyBookings() {
                                                     Pay Now
                                                 </Link>
                                             )}
-                                            {booking.status === 'FAILED' && (
+                                            {(booking.status === 'FAILED' || booking.status === 'CANCELLED') && (
                                                 <Link
                                                     to={`/events/${booking.event}`}
                                                     className="flex items-center gap-2 text-sm font-semibold text-rose-600 bg-rose-50 px-4 py-2 rounded-lg hover:bg-rose-100 transition-colors"

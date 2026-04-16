@@ -121,6 +121,13 @@ def build_checkout_url(payment):
     return build_absolute_frontend_url(f'/checkout/{payment.id}')
 
 
+def build_booking_cancellation_response(provider_response=None):
+    payload = dict(provider_response or {})
+    payload['reason'] = 'booking_cancelled'
+    payload['message'] = 'Booking was cancelled before payment confirmation.'
+    return payload
+
+
 def get_missing_esewa_settings():
     required_settings = [
         'ESEWA_PRODUCT_CODE',
@@ -365,6 +372,30 @@ def process_successful_payment(payment, provider_reference='', provider_response
     locked_payment = Payment.objects.select_for_update().select_related('booking').get(pk=payment.pk)
     booking = locked_payment.booking
     event = Event.objects.select_for_update().get(pk=booking.event_id)
+
+    if booking.status == Booking.STATUS_CANCELLED:
+        if locked_payment.status != Payment.STATUS_SUCCESS:
+            locked_payment.status = Payment.STATUS_FAILED
+            locked_payment.provider_reference = (
+                provider_reference
+                or locked_payment.provider_reference
+                or locked_payment.external_reference
+            )
+            locked_payment.provider_response = build_booking_cancellation_response(provider_response)
+            locked_payment.verified_at = timezone.now()
+            locked_payment.save(
+                update_fields=[
+                    'status',
+                    'provider_reference',
+                    'provider_response',
+                    'verified_at',
+                    'updated_at',
+                ]
+            )
+
+        return locked_payment, getattr(booking, 'ticket', None), (
+            'This booking has been cancelled and can no longer be confirmed.'
+        )
 
     confirmed_count = Booking.objects.filter(
         event_id=event.id,

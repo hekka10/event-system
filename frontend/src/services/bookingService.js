@@ -45,6 +45,17 @@ const sendTicketEmail = async (bookingId, token) => {
   );
 };
 
+const cancelBooking = async (bookingId, token) => {
+  return request(
+    `/bookings/${bookingId}/cancel/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+    },
+    'Failed to cancel booking'
+  );
+};
+
 const initiatePayment = async (payload, token) => {
   return request(
     '/payments/initiate/',
@@ -130,6 +141,7 @@ const bookingService = {
   getMyBookings,
   getBookingById,
   sendTicketEmail,
+  cancelBooking,
   initiatePayment,
   getPayment,
   retryPayment,

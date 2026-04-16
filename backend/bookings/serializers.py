@@ -75,6 +75,7 @@ class BookingSerializer(serializers.ModelSerializer):
     ticket = TicketSerializer(read_only=True)
     user_email = serializers.ReadOnlyField(source='user.email')
     latest_payment = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -92,6 +93,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'total_price',
             'ticket',
             'latest_payment',
+            'can_cancel',
             'confirmed_at',
             'created_at',
         ]
@@ -114,6 +116,9 @@ class BookingSerializer(serializers.ModelSerializer):
         if not payment:
             return None
         return PaymentSerializer(payment).data
+
+    def get_can_cancel(self, obj):
+        return obj.can_cancel()
 
 
 class BookingRequestValidationMixin:

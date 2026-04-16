@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect
 from rest_framework.decorators import action
 from rest_framework import permissions, status, viewsets
@@ -150,6 +151,23 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = serializer.save()
         output_serializer = BookingSerializer(booking, context={'request': request})
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel(self, request, pk=None):
+        booking = self.get_object()
+
+        try:
+            booking.cancel()
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'message': 'Booking cancelled successfully.',
+                'booking': BookingSerializer(booking, context={'request': request}).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=True, methods=['post'], url_path='send-ticket-email')
     def send_ticket_email(self, request, pk=None):
@@ -568,6 +586,12 @@ class TicketScanView(APIView):
         event = serializer.validated_data.get('event')
         if event and ticket.booking.event_id != event.id:
             return Response({'detail': 'Ticket does not belong to the selected event.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if ticket.booking.status != Booking.STATUS_CONFIRMED:
+            return Response(
+                {'detail': 'This ticket is no longer active.'},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         if serializer.validated_data['mark_checked_in']:
             if not ticket.mark_checked_in(request.user):

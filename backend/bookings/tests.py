@@ -128,6 +128,112 @@ class BookingWorkflowTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
+    def test_pending_booking_can_be_cancelled(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+
+        booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(booking.status, Booking.STATUS_CANCELLED)
+        self.assertEqual(response.data['booking']['status'], Booking.STATUS_CANCELLED)
+        self.assertFalse(response.data['booking']['can_cancel'])
+
+    def test_confirmed_future_booking_can_be_cancelled(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+            confirmed_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=booking)
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+
+        booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(booking.status, Booking.STATUS_CANCELLED)
+        self.assertTrue(Ticket.objects.filter(booking=booking).exists())
+
+    def test_past_booking_cannot_be_cancelled(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        Event.objects.filter(pk=self.event.pk).update(date=timezone.now() - timedelta(hours=1))
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+
+        booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Past events cannot be cancelled', str(response.data['detail']))
+        self.assertEqual(booking.status, Booking.STATUS_PENDING)
+
+    def test_checked_in_booking_cannot_be_cancelled(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+            confirmed_at=timezone.now(),
+        )
+        ticket = Ticket.objects.create(booking=booking)
+        ticket.is_scanned = True
+        ticket.scanned_at = timezone.now()
+        ticket.checked_in_by = self.organizer
+        ticket.save(update_fields=['is_scanned', 'scanned_at', 'checked_in_by'])
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+
+        booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Checked-in bookings cannot be cancelled', str(response.data['detail']))
+        self.assertEqual(booking.status, Booking.STATUS_CONFIRMED)
+
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         DEFAULT_FROM_EMAIL='no-reply@test.com',
@@ -219,6 +325,89 @@ class BookingWorkflowTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('Only confirmed bookings', str(response.data))
+
+    def test_cancelling_pending_booking_blocks_late_payment_confirmation(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking,
+            user=self.attendee,
+            provider=Payment.PROVIDER_MOCK,
+            method='ONLINE',
+            status=Payment.STATUS_INITIATED,
+            amount=Decimal('50.00'),
+            external_reference='PAY-CANCELLED-LATE',
+        )
+
+        self.client.force_authenticate(user=self.attendee)
+        cancel_response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+        self.assertEqual(cancel_response.status_code, status.HTTP_200_OK)
+
+        response = self.client.post(
+            reverse('payment_verify', args=[payment.id]),
+            {
+                'status': Payment.STATUS_SUCCESS,
+                'provider_reference': 'SANDBOX-LATE',
+                'provider_response': {'gateway': 'sandbox'},
+            },
+            format='json',
+        )
+
+        booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn('cancelled', str(response.data['detail']).lower())
+        self.assertEqual(booking.status, Booking.STATUS_CANCELLED)
+        self.assertEqual(payment.status, Payment.STATUS_FAILED)
+
+    def test_cancelled_ticket_cannot_be_scanned(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+            confirmed_at=timezone.now(),
+        )
+        ticket = Ticket.objects.create(booking=booking)
+
+        self.client.force_authenticate(user=self.attendee)
+        cancel_response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+        self.assertEqual(cancel_response.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.post(
+            reverse('ticket_scan'),
+            {
+                'ticket_code': ticket.ticket_code,
+                'event': str(self.event.id),
+            },
+            format='json',
+        )
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn('no longer active', str(response.data['detail']).lower())
+        self.assertFalse(ticket.is_scanned)
 
     def test_payment_initiation_blocks_full_event(self):
         sold_out_event = Event.objects.create(

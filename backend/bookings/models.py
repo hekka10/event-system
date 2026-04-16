@@ -128,6 +128,34 @@ class Booking(models.Model):
         send_booking_confirmation_email(self, ticket)
         return ticket
 
+    def get_cancellation_error(self):
+        if self.status == self.STATUS_CANCELLED:
+            return 'This booking has already been cancelled.'
+
+        if self.status == self.STATUS_FAILED:
+            return 'Failed bookings cannot be cancelled.'
+
+        if self.event.date <= timezone.now():
+            return 'Past events cannot be cancelled.'
+
+        ticket = getattr(self, 'ticket', None)
+        if ticket and ticket.is_scanned:
+            return 'Checked-in bookings cannot be cancelled.'
+
+        return None
+
+    def can_cancel(self):
+        return self.get_cancellation_error() is None
+
+    def cancel(self):
+        error = self.get_cancellation_error()
+        if error:
+            raise ValidationError({'detail': error})
+
+        self.status = self.STATUS_CANCELLED
+        self.save(update_fields=['status', 'updated_at'])
+        return self
+
     def mark_failed(self):
         if self.status == self.STATUS_CONFIRMED:
             return
