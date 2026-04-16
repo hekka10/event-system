@@ -5,6 +5,7 @@ import {
   Calendar,
   CarFront,
   CheckCircle2,
+  Download,
   Edit3,
   Loader2,
   MapPin,
@@ -31,9 +32,13 @@ function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [attendeesLoading, setAttendeesLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [attendeesError, setAttendeesError] = useState(null);
   const [notice, setNotice] = useState(location.state?.message || '');
+  const [attendeeReport, setAttendeeReport] = useState(null);
   const { user, token, isAdmin } = useAuth();
 
   useEffect(() => {
@@ -42,10 +47,15 @@ function EventDetail() {
 
   useEffect(() => {
     const fetchEvent = async () => {
+      setLoading(true);
+      setEvent(null);
+      setLoadError(null);
+      setAttendeeReport(null);
+      setAttendeesError(null);
+
       try {
         const data = await eventService.getEventById(id, token);
         setEvent(data);
-        setLoadError(null);
       } catch (fetchError) {
         setLoadError(fetchError.message || 'Failed to load event details.');
       } finally {
@@ -55,6 +65,38 @@ function EventDetail() {
 
     fetchEvent();
   }, [id, token]);
+
+  const canManageEvent = Boolean(user && event && (isAdmin || user.id === event.organizer));
+  const attendeeSummary = attendeeReport?.summary || {
+    confirmed_count: 0,
+    checked_in_count: 0,
+    student_count: 0,
+  };
+  const attendeeList = attendeeReport?.attendees || [];
+
+  useEffect(() => {
+    if (!canManageEvent || !event || !token) {
+      setAttendeeReport(null);
+      setAttendeesError(null);
+      setAttendeesLoading(false);
+      return;
+    }
+
+    const fetchAttendees = async () => {
+      setAttendeesLoading(true);
+      try {
+        const data = await eventService.getEventAttendees(event.id, token);
+        setAttendeeReport(data);
+        setAttendeesError(null);
+      } catch (attendeeError) {
+        setAttendeesError(attendeeError.message || 'Failed to load attendee list.');
+      } finally {
+        setAttendeesLoading(false);
+      }
+    };
+
+    fetchAttendees();
+  }, [canManageEvent, event, token]);
 
   const handleBooking = async () => {
     if (!user) {
@@ -127,6 +169,25 @@ function EventDetail() {
     }
   };
 
+  const handleExportAttendees = async () => {
+    setExportLoading(true);
+    setAttendeesError(null);
+    setNotice('');
+
+    try {
+      const response = await eventService.downloadEventAttendeesCsv(id, token);
+      setNotice(
+        response?.filename
+          ? `Attendee list exported as ${response.filename}.`
+          : 'Attendee list exported successfully.'
+      );
+    } catch (exportError) {
+      setAttendeesError(exportError.message || 'Failed to export attendee list.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -161,7 +222,6 @@ function EventDetail() {
     },
   });
   const googleMapsLink = event.google_maps_link || event.parking_map_url;
-  const canManageEvent = Boolean(user && (isAdmin || user.id === event.organizer));
   const canApproveEvent = Boolean(isAdmin && !event.is_approved);
 
   return (
@@ -320,6 +380,121 @@ function EventDetail() {
                 </div>
               )}
             </div>
+
+            {canManageEvent && (
+              <div className="mt-8 bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Attendee List</h2>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Confirmed attendees, walk-ins, and live check-in status for this event.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportAttendees}
+                    disabled={exportLoading || attendeesLoading || attendeeList.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {exportLoading ? 'Exporting...' : 'Export CSV'}
+                  </button>
+                </div>
+
+                {attendeesError && (
+                  <AlertMessage variant="error" className="mb-6 font-medium">
+                    {attendeesError}
+                  </AlertMessage>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="rounded-2xl bg-indigo-50 px-5 py-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-indigo-500">Confirmed</p>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">{attendeeSummary.confirmed_count}</p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 px-5 py-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-500">Checked In</p>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">{attendeeSummary.checked_in_count}</p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 px-5 py-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-amber-500">Student Tickets</p>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">{attendeeSummary.student_count}</p>
+                  </div>
+                </div>
+
+                {attendeesLoading ? (
+                  <div className="flex items-center justify-center rounded-2xl border border-dashed border-gray-200 px-6 py-14">
+                    <div className="flex items-center gap-3 text-sm font-medium text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                      Loading attendee list...
+                    </div>
+                  </div>
+                ) : attendeeList.length > 0 ? (
+                  <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                    <table className="min-w-full text-left">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Attendee</th>
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Ticket</th>
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Source</th>
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Paid</th>
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Confirmed</th>
+                          <th className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Check-In</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {attendeeList.map((attendee) => (
+                          <tr key={attendee.id} className="align-top">
+                            <td className="px-5 py-4 text-sm">
+                              <p className="font-semibold text-gray-900">{attendee.attendee_name}</p>
+                              <p className="mt-1 text-gray-500">{attendee.attendee_email}</p>
+                              {attendee.is_student && (
+                                <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                  Student
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-sm">
+                              <p className="font-mono text-xs font-semibold text-gray-700">{attendee.ticket_code || 'Pending ticket'}</p>
+                            </td>
+                            <td className="px-5 py-4 text-sm">
+                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                {attendee.booking_source}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-sm font-semibold text-gray-900">
+                              {formatNpr(attendee.total_price, { allowFree: true })}
+                            </td>
+                            <td className="px-5 py-4 text-sm text-gray-600">
+                              {formatDateTime(attendee.confirmed_at)}
+                            </td>
+                            <td className="px-5 py-4 text-sm">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                attendee.is_checked_in
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {attendee.is_checked_in ? 'Checked In' : 'Not checked in'}
+                              </span>
+                              <p className="mt-2 text-xs text-gray-500">
+                                {attendee.scanned_at ? formatDateTime(attendee.scanned_at) : 'Awaiting scan'}
+                              </p>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-14 text-center">
+                    <p className="text-lg font-semibold text-gray-900">No confirmed attendees yet</p>
+                    <p className="mt-2 text-sm text-gray-500">
+                      This list will populate automatically as bookings are confirmed.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-1">

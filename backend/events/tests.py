@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from bookings.models import Booking
+from bookings.models import Booking, Ticket
 from events.models import Category, Event
 from users.models import StudentVerification
 
@@ -556,3 +556,105 @@ class EventAPITests(APITestCase):
             'https://maps.google.com/?q=27.7000,85.3333',
         )
         self.assertEqual(response.data['parking_info'], 'Park on the north side.')
+
+    def test_organizer_can_view_confirmed_attendees_for_own_event(self):
+        event = Event.objects.create(
+            title='Attendee Access',
+            description='Desc',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall G',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        confirmed_booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=True,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('5.00'),
+            total_price=Decimal('20.00'),
+            confirmed_at=timezone.now(),
+        )
+        ticket = Ticket.objects.create(booking=confirmed_booking)
+        ticket.mark_checked_in(self.organizer)
+        Booking.objects.create(
+            user=self.admin,
+            event=event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+        )
+
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.get(reverse('event-attendees', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['summary']['confirmed_count'], 1)
+        self.assertEqual(response.data['summary']['checked_in_count'], 1)
+        self.assertEqual(response.data['summary']['student_count'], 1)
+        self.assertEqual(len(response.data['attendees']), 1)
+        self.assertEqual(response.data['attendees'][0]['attendee_email'], self.other_user.email)
+        self.assertEqual(response.data['attendees'][0]['ticket_code'], ticket.ticket_code)
+        self.assertTrue(response.data['attendees'][0]['is_checked_in'])
+
+    def test_non_organizer_cannot_view_event_attendees(self):
+        event = Event.objects.create(
+            title='Protected Attendees',
+            description='Desc',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall H',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(reverse('event-attendees', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_organizer_can_export_event_attendees_as_csv(self):
+        event = Event.objects.create(
+            title='Export Ready Event',
+            description='Desc',
+            date=timezone.now() + timedelta(days=4),
+            location='Hall I',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_OFFLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        ticket = Ticket.objects.create(booking=booking)
+
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.get(f"{reverse('event-attendees', args=[event.id])}?export=csv")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        self.assertIn('attachment;', response['Content-Disposition'])
+        content = response.content.decode()
+        self.assertIn('Attendee Email', content)
+        self.assertIn(self.other_user.email, content)
+        self.assertIn(ticket.ticket_code, content)

@@ -179,6 +179,58 @@ class BookingWorkflowTests(APITestCase):
         self.assertEqual(booking.status, Booking.STATUS_CANCELLED)
         self.assertTrue(Ticket.objects.filter(booking=booking).exists())
 
+    def test_booking_cannot_be_cancelled_within_three_hours_of_event_start(self):
+        booking = Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        Event.objects.filter(pk=self.event.pk).update(date=timezone.now() + timedelta(hours=2, minutes=59))
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.post(
+            reverse('booking-cancel', args=[booking.id]),
+            format='json',
+        )
+
+        booking.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            'Bookings can only be cancelled more than 3 hours before the event starts',
+            str(response.data['detail']),
+        )
+        self.assertEqual(booking.status, Booking.STATUS_PENDING)
+
+    def test_booking_list_includes_cancellation_error_when_deadline_has_passed(self):
+        Booking.objects.create(
+            user=self.attendee,
+            event=self.event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('50.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('50.00'),
+        )
+        Event.objects.filter(pk=self.event.pk).update(date=timezone.now() + timedelta(hours=2, minutes=30))
+
+        self.client.force_authenticate(user=self.attendee)
+        response = self.client.get(reverse('booking-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertFalse(response.data[0]['can_cancel'])
+        self.assertEqual(
+            response.data[0]['cancellation_error'],
+            'Bookings can only be cancelled more than 3 hours before the event starts.',
+        )
+
     def test_past_booking_cannot_be_cancelled(self):
         booking = Booking.objects.create(
             user=self.attendee,

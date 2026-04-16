@@ -1,4 +1,4 @@
-import { getAuthHeaders, request } from './api';
+import { buildApiUrl, getAuthHeaders, parseErrorMessage, request } from './api';
 
 const getAllEvents = async (category = '', token = '') => {
   const query = category ? `?category=${category}` : '';
@@ -29,6 +29,45 @@ const getRecommendedEvents = async (token) => {
     },
     'Failed to fetch recommended events'
   );
+};
+
+const getEventAttendees = async (id, token) => {
+  return request(
+    `/events/${id}/attendees/`,
+    {
+      headers: getAuthHeaders(token),
+    },
+    'Failed to fetch attendee list'
+  );
+};
+
+const downloadEventAttendeesCsv = async (id, token) => {
+  const response = await fetch(buildApiUrl(`/events/${id}/attendees/?export=csv`), {
+    headers: getAuthHeaders(token),
+  });
+
+  const isJson = response.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await response.json() : null;
+
+  if (!response.ok) {
+    throw new Error(parseErrorMessage(data, 'Failed to export attendee list'));
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const disposition = response.headers.get('content-disposition') || '';
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = filenameMatch?.[1] || `event-${id}-attendees.csv`;
+  const link = document.createElement('a');
+
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+
+  return { filename };
 };
 
 const createEvent = async (eventData, token) => {
@@ -87,6 +126,8 @@ const eventService = {
   getAllEvents,
   getEventById,
   getRecommendedEvents,
+  getEventAttendees,
+  downloadEventAttendeesCsv,
   createEvent,
   updateEvent,
   deleteEvent,

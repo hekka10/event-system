@@ -62,6 +62,19 @@ const getStatusMeta = (booking) => {
     };
 };
 
+const getCancellationNotice = (booking) => {
+    if (
+        booking.can_cancel
+        || !booking.cancellation_error
+        || booking.status === 'CANCELLED'
+        || booking.status === 'FAILED'
+    ) {
+        return null;
+    }
+
+    return booking.cancellation_error;
+};
+
 function MyBookings() {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -235,6 +248,7 @@ function MyBookings() {
                     <div className="space-y-6">
                         {filteredBookings.map((booking) => {
                             const statusMeta = getStatusMeta(booking);
+                            const cancellationNotice = getCancellationNotice(booking);
 
                             return (
                             <div key={booking.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row">
@@ -265,6 +279,13 @@ function MyBookings() {
                                         </div>
 
                                         <p className="text-sm text-gray-500 mb-4">{statusMeta.description}</p>
+
+                                        {cancellationNotice && (
+                                            <div className="mb-4 inline-flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                                                <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
+                                                <span>{cancellationNotice}</span>
+                                            </div>
+                                        )}
 
                                         <div className="flex flex-wrap gap-4 text-sm text-gray-500 mb-4">
                                             <div className="flex items-center gap-1.5">

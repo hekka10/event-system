@@ -1,3 +1,4 @@
+from datetime import timedelta
 from io import BytesIO
 from decimal import Decimal
 import uuid
@@ -11,6 +12,8 @@ from django.utils import timezone
 
 
 class Booking(models.Model):
+    CANCELLATION_DEADLINE = timedelta(hours=3)
+
     STATUS_PENDING = 'PENDING'
     STATUS_CONFIRMED = 'CONFIRMED'
     STATUS_CANCELLED = 'CANCELLED'
@@ -129,18 +132,23 @@ class Booking(models.Model):
         return ticket
 
     def get_cancellation_error(self):
+        now = timezone.now()
+
         if self.status == self.STATUS_CANCELLED:
             return 'This booking has already been cancelled.'
 
         if self.status == self.STATUS_FAILED:
             return 'Failed bookings cannot be cancelled.'
 
-        if self.event.date <= timezone.now():
+        if self.event.date <= now:
             return 'Past events cannot be cancelled.'
 
         ticket = getattr(self, 'ticket', None)
         if ticket and ticket.is_scanned:
             return 'Checked-in bookings cannot be cancelled.'
+
+        if self.event.date <= now + self.CANCELLATION_DEADLINE:
+            return 'Bookings can only be cancelled more than 3 hours before the event starts.'
 
         return None
 

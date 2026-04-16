@@ -3,6 +3,8 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 
+from bookings.models import Booking
+
 from .models import Event, Category
 
 
@@ -137,3 +139,46 @@ class EventSerializer(serializers.ModelSerializer):
     def get_viewer_total_price(self, obj):
         pricing = self._get_viewer_pricing(obj)
         return pricing['total_price']
+
+
+class EventAttendeeSerializer(serializers.ModelSerializer):
+    attendee_name = serializers.SerializerMethodField()
+    attendee_email = serializers.ReadOnlyField(source='user.email')
+    ticket_code = serializers.SerializerMethodField()
+    is_checked_in = serializers.SerializerMethodField()
+    scanned_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Booking
+        fields = [
+            'id',
+            'attendee_name',
+            'attendee_email',
+            'booking_source',
+            'is_student',
+            'total_price',
+            'confirmed_at',
+            'created_at',
+            'ticket_code',
+            'is_checked_in',
+            'scanned_at',
+        ]
+
+    def get_attendee_name(self, obj):
+        username = (obj.user.username or '').strip()
+        return username or obj.user.email
+
+    def get_ticket_code(self, obj):
+        ticket = self._get_ticket(obj)
+        return ticket.ticket_code if ticket else None
+
+    def get_is_checked_in(self, obj):
+        ticket = self._get_ticket(obj)
+        return bool(ticket and ticket.is_scanned)
+
+    def get_scanned_at(self, obj):
+        ticket = self._get_ticket(obj)
+        return ticket.scanned_at if ticket else None
+
+    def _get_ticket(self, obj):
+        return obj.ticket if hasattr(obj, 'ticket') else None

@@ -76,6 +76,7 @@ class BookingSerializer(serializers.ModelSerializer):
     user_email = serializers.ReadOnlyField(source='user.email')
     latest_payment = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
+    cancellation_error = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -94,6 +95,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'ticket',
             'latest_payment',
             'can_cancel',
+            'cancellation_error',
             'confirmed_at',
             'created_at',
         ]
@@ -119,6 +121,9 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def get_can_cancel(self, obj):
         return obj.can_cancel()
+
+    def get_cancellation_error(self, obj):
+        return obj.get_cancellation_error()
 
 
 class BookingRequestValidationMixin:
