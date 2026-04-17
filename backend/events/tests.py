@@ -1,8 +1,13 @@
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.management import call_command
 from django.urls import reverse
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -658,3 +663,294 @@ class EventAPITests(APITestCase):
         self.assertIn('Attendee Email', content)
         self.assertIn(self.other_user.email, content)
         self.assertIn(ticket.ticket_code, content)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+    )
+    def test_organizer_can_send_reminder_emails_to_confirmed_attendees(self):
+        event = Event.objects.create(
+            title='Reminder Event',
+            description='Desc',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall J',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        confirmed_booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=confirmed_booking)
+        Booking.objects.create(
+            user=self.admin,
+            event=event,
+            status=Booking.STATUS_PENDING,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+        )
+        mail.outbox = []
+
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.post(reverse('event-send-reminder', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['sent_count'], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.other_user.email])
+        self.assertIn('Reminder: Reminder Event', mail.outbox[0].subject)
+        self.assertIn('View your booking', mail.outbox[0].body)
+
+    def test_non_organizer_cannot_send_reminder_emails(self):
+        event = Event.objects.create(
+            title='Reminder Lock',
+            description='Desc',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall K',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.post(reverse('event-send-reminder', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_organizer_cannot_send_reminder_emails_without_confirmed_attendees(self):
+        event = Event.objects.create(
+            title='Empty Reminder Event',
+            description='Desc',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall L',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+
+        self.client.force_authenticate(user=self.organizer)
+        response = self.client.post(reverse('event-send-reminder', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('no confirmed attendees', str(response.data['detail']).lower())
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+    )
+    def test_organizer_send_reminder_continues_when_one_email_fails(self):
+        event = Event.objects.create(
+            title='Partial Reminder Event',
+            description='Desc',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall P',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        first_booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        second_attendee = User.objects.create_user(
+            email='reminder2@example.com',
+            username='reminder2',
+            password='password123',
+        )
+        second_booking = Booking.objects.create(
+            user=second_attendee,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=first_booking)
+        Ticket.objects.create(booking=second_booking)
+
+        self.client.force_authenticate(user=self.organizer)
+        with patch(
+            'events.services.EmailMultiAlternatives.send',
+            side_effect=[Exception('smtp failure'), 1],
+        ):
+            response = self.client.post(reverse('event-send-reminder', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['sent_count'], 1)
+        self.assertEqual(response.data['failed_count'], 1)
+        self.assertIn('could not be sent', response.data['message'])
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+    )
+    def test_organizer_send_reminder_returns_json_error_when_connection_fails(self):
+        event = Event.objects.create(
+            title='Broken Mail Event',
+            description='Desc',
+            date=timezone.now() + timedelta(days=2),
+            location='Hall Q',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=booking)
+
+        self.client.force_authenticate(user=self.organizer)
+        with patch(
+            'events.views.send_event_reminder_emails',
+            side_effect=Exception('smtp connect failure'),
+        ):
+            response = self.client.post(reverse('event-send-reminder', args=[event.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            response.data['detail'],
+            'Reminder emails could not be sent right now. Please try again.',
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+        EVENT_REMINDER_LEAD_HOURS=12,
+    )
+    def test_send_event_reminders_command_sends_due_reminders_and_marks_bookings(self):
+        due_event = Event.objects.create(
+            title='Due Reminder Event',
+            description='Desc',
+            date=timezone.now() + timedelta(hours=11, minutes=30),
+            location='Hall M',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        later_event = Event.objects.create(
+            title='Later Event',
+            description='Desc',
+            date=timezone.now() + timedelta(hours=16),
+            location='Hall N',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        due_booking = Booking.objects.create(
+            user=self.other_user,
+            event=due_event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        later_booking = Booking.objects.create(
+            user=self.admin,
+            event=later_event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=due_booking)
+        Ticket.objects.create(booking=later_booking)
+        mail.outbox = []
+
+        output = StringIO()
+        call_command('send_event_reminders', stdout=output)
+
+        due_booking.refresh_from_db()
+        later_booking.refresh_from_db()
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.other_user.email])
+        self.assertIsNotNone(due_booking.reminder_sent_at)
+        self.assertIsNone(later_booking.reminder_sent_at)
+        self.assertIn('Sent 1 reminder email', output.getvalue())
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
+        EVENT_REMINDER_LEAD_HOURS=12,
+    )
+    def test_send_event_reminders_command_skips_already_sent_bookings(self):
+        event = Event.objects.create(
+            title='Already Reminded Event',
+            description='Desc',
+            date=timezone.now() + timedelta(hours=10),
+            location='Hall O',
+            category=self.category,
+            price=Decimal('25.00'),
+            capacity=30,
+            organizer=self.organizer,
+            is_approved=True,
+        )
+        booking = Booking.objects.create(
+            user=self.other_user,
+            event=event,
+            status=Booking.STATUS_CONFIRMED,
+            booking_source=Booking.SOURCE_ONLINE,
+            is_student=False,
+            base_price=Decimal('25.00'),
+            discount_amount=Decimal('0.00'),
+            total_price=Decimal('25.00'),
+            confirmed_at=timezone.now(),
+            reminder_sent_at=timezone.now(),
+        )
+        Ticket.objects.create(booking=booking)
+        mail.outbox = []
+
+        output = StringIO()
+        call_command('send_event_reminders', stdout=output)
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIn('No reminder emails were due', output.getvalue())

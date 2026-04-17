@@ -8,6 +8,7 @@ import {
   Download,
   Edit3,
   Loader2,
+  Mail,
   MapPin,
   Navigation,
   Tag,
@@ -34,6 +35,7 @@ function EventDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [attendeesLoading, setAttendeesLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [attendeesError, setAttendeesError] = useState(null);
@@ -185,6 +187,21 @@ function EventDetail() {
       setAttendeesError(exportError.message || 'Failed to export attendee list.');
     } finally {
       setExportLoading(false);
+    }
+  };
+
+  const handleSendReminder = async () => {
+    setReminderLoading(true);
+    setAttendeesError(null);
+    setNotice('');
+
+    try {
+      const response = await eventService.sendEventReminder(id, token);
+      setNotice(response.message || 'Reminder emails sent successfully.');
+    } catch (reminderError) {
+      setAttendeesError(reminderError.message || 'Failed to send reminder emails.');
+    } finally {
+      setReminderLoading(false);
     }
   };
 
@@ -387,18 +404,30 @@ function EventDetail() {
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Attendee List</h2>
                     <p className="mt-2 text-sm text-gray-500">
-                      Confirmed attendees, walk-ins, and live check-in status for this event.
+                      Confirmed attendees receive an automatic reminder email 12 hours before the event starts.
+                      You can still send a manual reminder or export the list anytime.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleExportAttendees}
-                    disabled={exportLoading || attendeesLoading || attendeeList.length === 0}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {exportLoading ? 'Exporting...' : 'Export CSV'}
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSendReminder}
+                      disabled={reminderLoading || attendeesLoading || attendeeList.length === 0}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {reminderLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                      {reminderLoading ? 'Sending...' : 'Send Reminder'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportAttendees}
+                      disabled={exportLoading || attendeesLoading || attendeeList.length === 0}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {exportLoading ? 'Exporting...' : 'Export CSV'}
+                    </button>
+                  </div>
                 </div>
 
                 {attendeesError && (

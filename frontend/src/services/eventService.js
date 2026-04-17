@@ -41,6 +41,19 @@ const getEventAttendees = async (id, token) => {
   );
 };
 
+const sendEventReminder = async (id, token) => {
+  return request(
+    `/events/${id}/send-reminder/`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token, {
+        'Content-Type': 'application/json',
+      }),
+    },
+    'Failed to send reminder emails'
+  );
+};
+
 const downloadEventAttendeesCsv = async (id, token) => {
   const response = await fetch(buildApiUrl(`/events/${id}/attendees/?export=csv`), {
     headers: getAuthHeaders(token),
@@ -127,6 +140,7 @@ const eventService = {
   getEventById,
   getRecommendedEvents,
   getEventAttendees,
+  sendEventReminder,
   downloadEventAttendeesCsv,
   createEvent,
   updateEvent,

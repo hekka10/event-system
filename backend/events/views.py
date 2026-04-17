@@ -12,7 +12,7 @@ from bookings.models import Booking
 from .models import Category, Event
 from .permissions import IsAdminOrReadOnly, IsOrganizerOrAdmin
 from .serializers import CategorySerializer, EventAttendeeSerializer, EventSerializer
-from .services import get_recommended_events_for_user
+from .services import get_recommended_events_for_user, send_event_reminder_emails
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -36,6 +36,8 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action == 'approve':
             permission_classes = [permissions.IsAdminUser]
         elif self.action == 'attendees':
+            permission_classes = [permissions.IsAuthenticated, IsOrganizerOrAdmin]
+        elif self.action == 'send_reminder':
             permission_classes = [permissions.IsAuthenticated, IsOrganizerOrAdmin]
         elif self.action == 'recommended':
             permission_classes = [permissions.IsAuthenticated]
@@ -155,3 +157,61 @@ class EventViewSet(viewsets.ModelViewSet):
             ])
 
         return response
+
+    @action(detail=True, methods=['post'], url_path='send-reminder')
+    def send_reminder(self, request, pk=None):
+        event = self.get_object()
+        if event.date <= timezone.now():
+            return Response(
+                {'detail': 'Reminder emails can only be sent for upcoming events.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        attendees = list(
+            Booking.objects.filter(
+                event=event,
+                status=Booking.STATUS_CONFIRMED,
+            ).select_related(
+                'user',
+                'ticket',
+            )
+        )
+        if not attendees:
+            return Response(
+                {'detail': 'There are no confirmed attendees to remind for this event.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = send_event_reminder_emails(event, attendees, fail_silently=False)
+        except Exception:
+            return Response(
+                {'detail': 'Reminder emails could not be sent right now. Please try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        sent_count = result['sent_count']
+        failed_count = result['failed_count']
+
+        if sent_count == 0:
+            return Response(
+                {'detail': 'Reminder emails could not be sent right now. Please try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        message = f'Reminder emails sent to {sent_count} attendee{"s" if sent_count != 1 else ""}.'
+        if failed_count:
+            message += f' {failed_count} reminder{"s" if failed_count != 1 else ""} could not be sent.'
+
+        return Response(
+            {
+                'message': message,
+                'sent_count': sent_count,
+                'failed_count': failed_count,
+                'event': {
+                    'id': str(event.id),
+                    'title': event.title,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
