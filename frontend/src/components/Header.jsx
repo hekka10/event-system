@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket, BadgeCheck } from 'lucide-react';
+import { LogOut, User, Calendar, PlusSquare, LayoutDashboard, Ticket, BadgeCheck, UserPlus } from 'lucide-react';
 
 import useAuth from '../hooks/useAuth';
 import authService from '../services/authService';
@@ -7,6 +7,7 @@ import authService from '../services/authService';
 function Header() {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
+  const homePath = isAdmin ? '/admin-dashboard' : '/';
 
   const handleLogout = () => {
     authService.logout();
@@ -18,7 +19,7 @@ function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to={homePath} className="flex items-center gap-2">
               <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Calendar className="w-6 h-6 text-white" />
               </div>
@@ -28,7 +29,9 @@ function Header() {
             </Link>
 
             <nav className="hidden md:flex items-center gap-6">
-              <Link to="/" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Home</Link>
+              {!isAdmin && (
+                <Link to="/" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Home</Link>
+              )}
               <Link to="/events" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Events</Link>
               {user && (
                 <>
@@ -37,19 +40,27 @@ function Header() {
                     My Bookings
                   </Link>
                   {isAdmin && (
-                    <Link to="/admin-dashboard" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
-                      <LayoutDashboard className="w-4 h-4" />
-                      Dashboard
-                    </Link>
+                    <>
+                      <Link to="/admin-dashboard" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                        <LayoutDashboard className="w-4 h-4" />
+                        Dashboard
+                      </Link>
+                      <Link to="/admin/offline-booking" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                        <UserPlus className="w-4 h-4" />
+                        Offline Booking
+                      </Link>
+                    </>
                   )}
                   <Link to="/create-event" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
                     <PlusSquare className="w-4 h-4" />
                     Create Event
                   </Link>
-                  <Link to="/student-verification" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
-                    <BadgeCheck className="w-4 h-4" />
-                    Student Verification
-                  </Link>
+                  {!isAdmin && (
+                    <Link to="/student-verification" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                      <BadgeCheck className="w-4 h-4" />
+                      Student Verification
+                    </Link>
+                  )}
                 </>
               )}
             </nav>

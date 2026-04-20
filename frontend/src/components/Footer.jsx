@@ -4,6 +4,7 @@ import useAuth from '../hooks/useAuth';
 
 function Footer() {
   const { user, isAdmin } = useAuth();
+  const homePath = isAdmin ? '/admin-dashboard' : '/';
 
   return (
     <footer className="bg-white border-t border-gray-100 pt-16 pb-8">
@@ -11,7 +12,7 @@ function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
           {/* Brand */}
           <div className="col-span-1 md:col-span-1">
-            <Link to="/" className="flex items-center gap-2 mb-6">
+            <Link to={homePath} className="flex items-center gap-2 mb-6">
               <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Calendar className="w-6 h-6 text-white" />
               </div>
@@ -44,9 +45,14 @@ function Footer() {
                 <>
                   <li><Link to="/create-event" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Host an Event</Link></li>
                   <li><Link to="/my-bookings" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">My Tickets</Link></li>
-                  <li><Link to="/student-verification" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Student Verification</Link></li>
+                  {!isAdmin && (
+                    <li><Link to="/student-verification" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Student Verification</Link></li>
+                  )}
                   {isAdmin && (
-                    <li><Link to="/admin-dashboard" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Admin Dashboard</Link></li>
+                    <>
+                      <li><Link to="/admin-dashboard" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Admin Dashboard</Link></li>
+                      <li><Link to="/admin/offline-booking" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Offline Booking</Link></li>
+                    </>
                   )}
                 </>
               ) : (

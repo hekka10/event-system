@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock,
   DollarSign,
-  GraduationCap,
   Loader2,
   ShoppingCart,
   Ticket,
@@ -14,12 +13,10 @@ import {
 } from 'lucide-react';
 
 import AlertMessage from '../components/AlertMessage';
-import OfflineBookingForm from '../components/OfflineBookingForm';
 import TicketScannerPanel from '../components/TicketScannerPanel';
 import adminService from '../services/adminService';
 import eventService from '../services/eventService';
 import useAuth from '../hooks/useAuth';
-import studentService from '../services/studentService';
 import { formatNpr } from '../utils/currency';
 import { formatDateTime } from '../utils/date';
 
@@ -79,22 +76,6 @@ function AdminDashboard() {
     }
   };
 
-  const handleReviewVerification = async (verificationId, status) => {
-    try {
-      await studentService.reviewVerification(
-        verificationId,
-        {
-          status,
-          rejection_reason: status === 'REJECTED' ? 'Please provide a valid student document.' : '',
-        },
-        token
-      );
-      fetchStats();
-    } catch (reviewError) {
-      setError(reviewError.message || 'Failed to review student verification.');
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -118,12 +99,6 @@ function AdminDashboard() {
     { label: 'Pending Bookings', value: stats.pending_bookings, icon: Clock, color: 'bg-amber-500' },
     { label: 'Total Revenue', value: formatNpr(stats.total_revenue), icon: DollarSign, color: 'bg-teal-500' },
     { label: 'Checked In', value: stats.total_checked_in, icon: Ticket, color: 'bg-amber-500' },
-    {
-      label: 'Pending Student Reviews',
-      value: stats.pending_student_verification_count,
-      icon: GraduationCap,
-      color: 'bg-rose-500',
-    },
   ];
 
   return (
@@ -200,60 +175,6 @@ function AdminDashboard() {
                               className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
                             >
                               Approve
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-rose-50/40">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <GraduationCap className="w-5 h-5 text-rose-500" />
-                  Student Verification Queue
-                </h3>
-                <span className="px-2.5 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">
-                  {stats.pending_student_verifications.length} Pending
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-gray-50/50">
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">User</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Institution</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {stats.pending_student_verifications.length === 0 ? (
-                      <tr>
-                        <td colSpan="3" className="px-6 py-10 text-center text-gray-500 italic">No student verifications waiting for review.</td>
-                      </tr>
-                    ) : (
-                      stats.pending_student_verifications.map((verification) => (
-                        <tr key={verification.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-6 py-4 text-sm">
-                            <p className="font-semibold text-gray-900">{verification.user}</p>
-                            <p className="text-gray-500">{verification.student_email}</p>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{verification.institution_name}</td>
-                          <td className="px-6 py-4 text-right space-x-2">
-                            <button
-                              onClick={() => handleReviewVerification(verification.id, 'APPROVED')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleReviewVerification(verification.id, 'REJECTED')}
-                              className="bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
-                            >
-                              Reject
                             </button>
                           </td>
                         </tr>
@@ -368,18 +289,25 @@ function AdminDashboard() {
               <TrendingUp className="w-24 h-24 absolute -right-4 -bottom-4 text-white/10" />
               <h3 className="text-lg font-bold mb-2">Operations Snapshot</h3>
               <p className="text-white/80 text-sm mb-6 leading-relaxed">
-                Approvals, walk-ins, payments, and ticket scans are all connected from this dashboard now.
+                Event approvals, payments, and ticket scans stay here, while walk-ins now have their own dedicated booking desk.
               </p>
-              <button
-                onClick={() => navigate('/events')}
-                className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
-              >
-                Open Events
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => navigate('/admin/offline-booking')}
+                  className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
+                >
+                  Offline Booking Desk
+                </button>
+                <button
+                  onClick={() => navigate('/events')}
+                  className="bg-indigo-500/30 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-500/40 transition-all"
+                >
+                  Open Events
+                </button>
+              </div>
             </div>
 
             <TicketScannerPanel onSuccess={fetchStats} />
-            <OfflineBookingForm onSuccess={fetchStats} />
           </div>
         </div>
       </div>

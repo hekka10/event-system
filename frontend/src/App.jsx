@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import AdminRoute from './components/AdminRoute';
 import Footer from './components/Footer';
@@ -8,6 +8,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import useAuth from './hooks/useAuth';
 import authService from './services/authService';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminOfflineBooking from './pages/AdminOfflineBooking';
 import EventDetail from './pages/EventDetail';
 import EventForm from './pages/EventForm';
 import Events from './pages/Events';
@@ -22,7 +23,7 @@ import StudentVerification from './pages/StudentVerification';
 
 
 function App() {
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, token, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -39,7 +40,10 @@ function App() {
       <Header />
       <main className="min-h-screen">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route
+            path="/"
+            element={isAdmin ? <Navigate to="/admin-dashboard" replace /> : <Home />}
+          />
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/login" element={<Login />} />
@@ -57,6 +61,7 @@ function App() {
 
           <Route element={<AdminRoute />}>
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/offline-booking" element={<AdminOfflineBooking />} />
           </Route>
         </Routes>
       </main>

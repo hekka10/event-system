@@ -28,6 +28,15 @@ class UserFeatureTests(APITestCase):
             username='student',
             password='password123',
         )
+        self.google_user = User.objects.create_user(
+            email='google-only@example.com',
+            username='googleonly',
+            password=None,
+            auth_provider=User.AUTH_PROVIDER_GOOGLE,
+            google_sub='existing-google-sub-001',
+        )
+        self.google_user.set_unusable_password()
+        self.google_user.save(update_fields=['password'])
         self.admin = User.objects.create_superuser(
             email='admin@example.com',
             username='admin',
@@ -111,6 +120,28 @@ class UserFeatureTests(APITestCase):
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         DEFAULT_FROM_EMAIL='no-reply@test.com',
+        FRONTEND_BASE_URL='http://localhost:5173',
+    )
+    def test_password_reset_request_sends_email_for_google_user_without_password(self):
+        mail.outbox = []
+
+        response = self.client.post(
+            reverse('password_reset_request'),
+            {'email': '  GOOGLE-ONLY@EXAMPLE.COM  '},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.google_user.email])
+        self.assertIn(
+            f"/reset-password/{urlsafe_base64_encode(force_bytes(self.google_user.pk))}/",
+            mail.outbox[0].body,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.com',
     )
     def test_password_reset_request_is_generic_for_unknown_email(self):
         mail.outbox = []
@@ -142,6 +173,37 @@ class UserFeatureTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('NewStrongPassword123'))
+
+    def test_password_reset_confirm_sets_password_for_google_user(self):
+        uid = urlsafe_base64_encode(force_bytes(self.google_user.pk))
+        token = default_token_generator.make_token(self.google_user)
+
+        response = self.client.post(
+            reverse('password_reset_confirm'),
+            {
+                'uid': uid,
+                'token': token,
+                'password': 'NewStrongPassword123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.google_user.refresh_from_db()
+        self.assertTrue(self.google_user.has_usable_password())
+        self.assertTrue(self.google_user.check_password('NewStrongPassword123'))
+
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'email': self.google_user.email,
+                'password': 'NewStrongPassword123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(login_response.data['email'], self.google_user.email)
 
     def test_password_reset_confirm_rejects_invalid_token(self):
         uid = urlsafe_base64_encode(force_bytes(self.user.pk))

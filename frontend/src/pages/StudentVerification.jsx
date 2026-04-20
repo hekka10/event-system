@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FileBadge2, Loader2, ShieldCheck, Upload } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 
 import AlertMessage from '../components/AlertMessage';
 import useAuth from '../hooks/useAuth';
@@ -15,7 +16,7 @@ const statusStyles = {
 };
 
 function StudentVerification() {
-  const { token } = useAuth();
+  const { token, isAdmin } = useAuth();
 
   const [formData, setFormData] = useState({
     student_email: '',
@@ -31,6 +32,11 @@ function StudentVerification() {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
+    if (isAdmin) {
+      setLoading(false);
+      return;
+    }
+
     const fetchVerification = async () => {
       try {
         const data = await studentService.getMyVerification(token);
@@ -51,7 +57,7 @@ function StudentVerification() {
     };
 
     fetchVerification();
-  }, [token]);
+  }, [isAdmin, token]);
 
   const handleChange = (event) => {
     setFormData((current) => ({
@@ -92,6 +98,10 @@ function StudentVerification() {
         <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
       </div>
     );
+  }
+
+  if (isAdmin) {
+    return <Navigate to="/admin-dashboard" replace />;
   }
 
   return (

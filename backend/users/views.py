@@ -141,7 +141,7 @@ class PasswordResetRequestView(APIView):
             email=serializer.validated_data['email'],
             is_active=True,
         ).first()
-        if user and user.has_usable_password():
+        if user:
             send_password_reset_email(user)
 
         return Response(
