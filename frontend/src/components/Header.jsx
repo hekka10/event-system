@@ -49,6 +49,10 @@ function Header() {
                         <UserPlus className="w-4 h-4" />
                         Offline Booking
                       </Link>
+                      <Link to="/admin/student-verifications" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                        <BadgeCheck className="w-4 h-4" />
+                        Student Reviews
+                      </Link>
                     </>
                   )}
                   <Link to="/create-event" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">

@@ -31,10 +31,16 @@ Event System is a full-stack web application for creating, approving, booking, a
 ```text
 event-system/
 ├── backend/      # Django backend
+├── docs/         # Project diagrams and documentation
 ├── frontend/     # React frontend
 ├── README.md
 └── package.json  # Root helper scripts
 ```
+
+## Documentation
+
+- PlantUML activity diagrams: [docs/activity-diagrams-plantuml.md](docs/activity-diagrams-plantuml.md)
+- PlantUML database ERD: [docs/database-erd.puml](docs/database-erd.puml)
 
 ## Installation
 

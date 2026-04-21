@@ -9,6 +9,7 @@ import useAuth from './hooks/useAuth';
 import authService from './services/authService';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminOfflineBooking from './pages/AdminOfflineBooking';
+import AdminStudentVerifications from './pages/AdminStudentVerifications';
 import EventDetail from './pages/EventDetail';
 import EventForm from './pages/EventForm';
 import Events from './pages/Events';
@@ -62,6 +63,7 @@ function App() {
           <Route element={<AdminRoute />}>
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
             <Route path="/admin/offline-booking" element={<AdminOfflineBooking />} />
+            <Route path="/admin/student-verifications" element={<AdminStudentVerifications />} />
           </Route>
         </Routes>
       </main>

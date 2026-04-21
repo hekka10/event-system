@@ -52,6 +52,7 @@ function Footer() {
                     <>
                       <li><Link to="/admin-dashboard" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Admin Dashboard</Link></li>
                       <li><Link to="/admin/offline-booking" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Offline Booking</Link></li>
+                      <li><Link to="/admin/student-verifications" className="text-gray-500 hover:text-indigo-600 text-sm transition-colors">Student Reviews</Link></li>
                     </>
                   )}
                 </>
