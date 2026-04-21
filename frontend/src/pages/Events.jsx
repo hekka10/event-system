@@ -3,18 +3,37 @@ import { Link, useLocation } from 'react-router-dom';
 import AlertMessage from '../components/AlertMessage';
 import eventService from '../services/eventService';
 import EventCard from '../components/EventCard';
-import { Filter, Loader2, Sparkles } from 'lucide-react';
+import { Filter, Loader2, Search, Sparkles, X } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 function Events() {
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
   const { user, token } = useAuth();
   const location = useLocation();
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+  const filteredEvents = events.filter((event) => {
+    if (!normalizedSearchTerm) {
+      return true;
+    }
+
+    const searchableFields = [
+      event.title,
+      event.location,
+      event.category_name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableFields.includes(normalizedSearchTerm);
+  });
 
   useEffect(() => {
     setNotice(location.state?.message || '');
@@ -97,8 +116,30 @@ function Events() {
         )}
 
         {/* Filters Section */}
-        <div className="mb-10 flex flex-wrap items-center justify-center gap-4">
-          <div className="flex items-center bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
+        <div className="mb-10 space-y-4">
+          <div className="mx-auto flex max-w-2xl items-center rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <Search className="mr-3 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search events by name, location, or category"
+              className="w-full bg-transparent text-sm font-medium text-gray-700 outline-none placeholder:text-gray-400"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="ml-3 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex items-center bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
             <Filter className="w-5 h-5 text-gray-400 mr-2" />
             <span className="text-sm font-medium text-gray-700 mr-4">Filter by:</span>
             <div className="flex gap-2">
@@ -125,6 +166,24 @@ function Events() {
               ))}
             </div>
           </div>
+
+            {(selectedCategory || searchTerm) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('');
+                  setSearchTerm('');
+                }}
+                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 shadow-sm transition-colors hover:border-indigo-300 hover:text-indigo-600"
+              >
+                Clear search and filters
+              </button>
+            )}
+          </div>
+
+          <div className="text-center text-sm font-medium text-gray-500">
+            Showing {filteredEvents.length} of {events.length} events
+          </div>
         </div>
 
         {/* Content Section */}
@@ -149,20 +208,27 @@ function Events() {
           >
             <p className="font-medium">{error}</p>
           </AlertMessage>
-        ) : events.length > 0 ? (
+        ) : filteredEvents.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {events.map((event) => (
+            {filteredEvents.map((event) => (
               <EventCard key={event.id} event={event} />
             ))}
           </div>
         ) : (
           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
-            <p className="text-gray-500 text-lg">No events found in this category.</p>
+            <p className="text-gray-500 text-lg">
+              {searchTerm
+                ? `No events match "${searchTerm}".`
+                : 'No events found in this category.'}
+            </p>
             <button
-              onClick={() => setSelectedCategory('')}
+              onClick={() => {
+                setSelectedCategory('');
+                setSearchTerm('');
+              }}
               className="mt-2 text-indigo-600 font-semibold hover:text-indigo-700"
             >
-              Clear filters
+              Clear search and filters
             </button>
           </div>
         )}
